@@ -1,0 +1,116 @@
+<!doctype html><html data-content_root=../../../ lang=en><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0"name=viewport><title>latexgit.utils.help — latexgit 0.8.2 documentation</title><link href="../../../_static/pygments.css?v=80d5e7a1"rel=stylesheet><link href="../../../_static/bizstyle.css?v=532c1bf3"rel=stylesheet><script src="../../../_static/documentation_options.js?v=dbee5847"></script><script src="../../../_static/doctools.js?v=888ff710"></script><script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script><script src=../../../_static/bizstyle.js></script><link href=https://thomasweise.github.io/latexgit_py/_modules/latexgit/utils/help.html rel=canonical><link href=../../../genindex.html rel=index title=Index><link href=../../../search.html rel=search title=Search><meta content="width=device-width,initial-scale=1.0"name=viewport><body><div aria-label="related navigation"class=related role=navigation><h3>Navigation</h3><ul><li class=right style=margin-right:10px><a title="General Index"accesskey=I href=../../../genindex.html>index</a><li class=right><a title="Python Module Index"href=../../../py-modindex.html>modules</a> |<li class="nav-item nav-item-0"><a href=../../../index.html>latexgit 0.8.2 documentation</a> »<li class="nav-item nav-item-1"><a accesskey=U href=../../index.html>Module code</a> »<li class="nav-item nav-item-this"><a href>latexgit.utils.help</a></ul></div><div class=document><div class=documentwrapper><div class=bodywrapper><div class=body role=main><h1>Source code for latexgit.utils.help</h1><div class=highlight><pre>
+<span></span><span class=sd>"""Print a help screen."""</span>
+
+<span class=kn>import</span> <span class=nn>argparse</span>
+<span class=kn>import</span> <span class=nn>os.path</span>
+<span class=kn>import</span> <span class=nn>sys</span>
+<span class=kn>from</span> <span class=nn>typing</span> <span class=kn>import</span> <span class=n>Final</span>
+
+<span class=kn>from</span> <span class=nn>latexgit.utils.path</span> <span class=kn>import</span> <span class=n>_canonicalize_path</span>
+<span class=kn>from</span> <span class=nn>latexgit.utils.types</span> <span class=kn>import</span> <span class=n>type_error</span>
+<span class=kn>from</span> <span class=nn>latexgit.version</span> <span class=kn>import</span> <span class=n>__version__</span>
+
+<span class=c1>#: The default argument parser for latexgit executables.</span>
+<span class=n>__DEFAULT_ARGUMENTS</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>argparse</span><span class=o>.</span><span class=n>ArgumentParser</span><span class=p>]</span> <span class=o>=</span> <span class=n>argparse</span><span class=o>.</span><span class=n>ArgumentParser</span><span class=p>(</span>
+    <span class=n>epilog</span><span class=o>=</span><span class=s2>"Copyright</span><span class=se>\u00a0\u00a9\u00a0</span><span class=s2>2022</span><span class=se>\u00a0</span><span class=s2>Thomas</span><span class=se>\u00a0</span><span class=s2>WEISE, "</span>
+           <span class=s2>"GNU</span><span class=se>\u00a0</span><span class=s2>GENERAL</span><span class=se>\u00a0</span><span class=s2>PUBLIC</span><span class=se>\u00a0</span><span class=s2>LICENSE</span><span class=se>\u00a0</span><span class=s2>Version</span><span class=se>\u00a0</span><span class=s2>3,"</span>
+           <span class=s2>"</span><span class=se>\u00a0</span><span class=s2>29</span><span class=se>\u00a0</span><span class=s2>June</span><span class=se>\u00a0</span><span class=s2>2007, "</span>
+           <span class=s2>"https://thomasweise.github.io/latexgit, "</span>
+           <span class=s2>"tweise@hfuu.edu.cn,</span><span class=se>\u00a0</span><span class=s2>tweise@ustc.edu.cn"</span><span class=p>,</span>
+    <span class=n>add_help</span><span class=o>=</span><span class=kc>False</span><span class=p>,</span>
+    <span class=n>formatter_class</span><span class=o>=</span><span class=n>argparse</span><span class=o>.</span><span class=n>ArgumentDefaultsHelpFormatter</span><span class=p>,</span>
+<span class=p>)</span>
+<span class=n>__DEFAULT_ARGUMENTS</span><span class=o>.</span><span class=n>add_argument</span><span class=p>(</span>
+    <span class=s2>"--version"</span><span class=p>,</span> <span class=n>action</span><span class=o>=</span><span class=s2>"version"</span><span class=p>,</span> <span class=n>version</span><span class=o>=</span><span class=n>__version__</span><span class=p>)</span>
+
+
+<span class=k>def</span> <span class=nf>__get_python_interpreter_short</span><span class=p>()</span> <span class=o>-></span> <span class=nb>str</span><span class=p>:</span>
+<span class=w>    </span><span class=sd>"""</span>
+<span class=sd>    Get the python interpreter.</span>
+
+<span class=sd>    :returns: the fully-qualified path</span>
+<span class=sd>    """</span>
+    <span class=n>inter</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>str</span><span class=p>]</span> <span class=o>=</span> <span class=n>_canonicalize_path</span><span class=p>(</span><span class=n>sys</span><span class=o>.</span><span class=n>executable</span><span class=p>)</span>
+    <span class=n>bn</span> <span class=o>=</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>basename</span><span class=p>(</span><span class=n>inter</span><span class=p>)</span>
+    <span class=k>if</span> <span class=n>bn</span><span class=o>.</span><span class=n>startswith</span><span class=p>(</span><span class=s2>"python3."</span><span class=p>):</span>
+        <span class=n>bn2</span> <span class=o>=</span> <span class=n>bn</span><span class=p>[:</span><span class=mi>7</span><span class=p>]</span>
+        <span class=n>interp2</span> <span class=o>=</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>dirname</span><span class=p>(</span><span class=n>inter</span><span class=p>),</span> <span class=n>bn2</span><span class=p>)</span>
+        <span class=k>if</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>exists</span><span class=p>(</span><span class=n>interp2</span><span class=p>)</span> <span class=ow>and</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>isfile</span><span class=p>(</span><span class=n>interp2</span><span class=p>)</span> \
+                <span class=ow>and</span> <span class=p>(</span><span class=n>_canonicalize_path</span><span class=p>(</span><span class=n>interp2</span><span class=p>)</span> <span class=o>==</span> <span class=n>inter</span><span class=p>):</span>
+            <span class=k>return</span> <span class=n>bn2</span>
+    <span class=k>return</span> <span class=n>bn</span>
+
+
+<span class=c1>#: The python interpreter in short form.</span>
+<span class=n>__INTERPRETER_SHORT</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>str</span><span class=p>]</span> <span class=o>=</span> <span class=n>__get_python_interpreter_short</span><span class=p>()</span>
+<span class=k>del</span> <span class=n>__get_python_interpreter_short</span>
+
+<span class=c1>#: the base path of the latexgit package</span>
+<span class=n>__BASE_PATH</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>str</span><span class=p>]</span> <span class=o>=</span> <span class=n>_canonicalize_path</span><span class=p>(</span><span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>dirname</span><span class=p>(</span>
+    <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>dirname</span><span class=p>(</span><span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>dirname</span><span class=p>(</span><span class=n>_canonicalize_path</span><span class=p>(</span><span class=vm>__file__</span><span class=p>)))))</span> <span class=o>+</span> <span class=n>os</span><span class=o>.</span><span class=n>sep</span>
+
+
+<span class=k>def</span> <span class=nf>__get_prog</span><span class=p>(</span><span class=n>file</span><span class=p>:</span> <span class=nb>str</span><span class=p>)</span> <span class=o>-></span> <span class=nb>str</span><span class=p>:</span>
+<span class=w>    </span><span class=sd>"""</span>
+<span class=sd>    Get the program as to be displayed by the help screen.</span>
+
+<span class=sd>    The result of this function applied to the `__file__` special</span>
+<span class=sd>    variable should be put into the `prog` argument of the constructor</span>
+<span class=sd>    of :class:`argparse.ArgumentParser`.</span>
+
+<span class=sd>    :param file: the calling python script</span>
+<span class=sd>    :return: the program string</span>
+<span class=sd>    """</span>
+    <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>file</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+        <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>file</span><span class=p>,</span> <span class=s2>"file"</span><span class=p>,</span> <span class=nb>str</span><span class=p>)</span>
+
+    <span class=c1># get the module minus the base path and extension</span>
+    <span class=n>module</span><span class=p>:</span> <span class=nb>str</span> <span class=o>=</span> <span class=n>_canonicalize_path</span><span class=p>(</span><span class=n>file</span><span class=p>)</span>
+    <span class=n>end</span><span class=p>:</span> <span class=nb>int</span> <span class=o>=</span> <span class=nb>len</span><span class=p>(</span><span class=n>module</span><span class=p>)</span>
+    <span class=n>start</span><span class=p>:</span> <span class=nb>int</span> <span class=o>=</span> <span class=mi>0</span>
+    <span class=k>if</span> <span class=n>module</span><span class=o>.</span><span class=n>endswith</span><span class=p>(</span><span class=s2>".py"</span><span class=p>):</span>
+        <span class=n>end</span> <span class=o>-=</span> <span class=mi>3</span>
+    <span class=k>if</span> <span class=n>module</span><span class=o>.</span><span class=n>startswith</span><span class=p>(</span><span class=n>__BASE_PATH</span><span class=p>):</span>
+        <span class=n>start</span> <span class=o>+=</span> <span class=nb>len</span><span class=p>(</span><span class=n>__BASE_PATH</span><span class=p>)</span>
+    <span class=n>module</span> <span class=o>=</span> <span class=n>module</span><span class=p>[</span><span class=n>start</span><span class=p>:</span><span class=n>end</span><span class=p>]</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=n>os</span><span class=o>.</span><span class=n>sep</span><span class=p>,</span> <span class=s2>"."</span><span class=p>)</span>
+
+    <span class=k>return</span> <span class=sa>f</span><span class=s2>"</span><span class=si>{</span><span class=n>__INTERPRETER_SHORT</span><span class=si>}</span><span class=s2> -m </span><span class=si>{</span><span class=n>module</span><span class=si>}</span><span class=s2>"</span>
+
+
+<div class=viewcode-block id=argparser>
+<a class=viewcode-back href=../../../latexgit.utils.html#latexgit.utils.help.argparser>[docs]</a>
+<span class=k>def</span> <span class=nf>argparser</span><span class=p>(</span><span class=n>file</span><span class=p>:</span> <span class=nb>str</span><span class=p>,</span> <span class=n>description</span><span class=p>:</span> <span class=nb>str</span><span class=p>,</span>
+              <span class=n>epilog</span><span class=p>:</span> <span class=nb>str</span><span class=p>)</span> <span class=o>-></span> <span class=n>argparse</span><span class=o>.</span><span class=n>ArgumentParser</span><span class=p>:</span>
+<span class=w>    </span><span class=sd>"""</span>
+<span class=sd>    Create an argument parser with default settings.</span>
+
+<span class=sd>    :param file: the `__file__` special variable of the calling script</span>
+<span class=sd>    :param description: the description string</span>
+<span class=sd>    :param epilog: the epilogue string</span>
+<span class=sd>    :returns: the argument parser</span>
+
+<span class=sd>    >>> ap = argparser(__file__, "This is a test program.", "This is a test.")</span>
+<span class=sd>    >>> isinstance(ap, argparse.ArgumentParser)</span>
+<span class=sd>    True</span>
+<span class=sd>    >>> "Copyright" in ap.epilog</span>
+<span class=sd>    True</span>
+<span class=sd>    """</span>
+    <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>file</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+        <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>file</span><span class=p>,</span> <span class=s2>"file"</span><span class=p>,</span> <span class=nb>str</span><span class=p>)</span>
+    <span class=k>if</span> <span class=nb>len</span><span class=p>(</span><span class=n>file</span><span class=p>)</span> <span class=o><=</span> <span class=mi>3</span><span class=p>:</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"invalid file=</span><span class=si>{</span><span class=n>file</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+    <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>description</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+        <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>description</span><span class=p>,</span> <span class=s2>"description"</span><span class=p>,</span> <span class=nb>str</span><span class=p>)</span>
+    <span class=k>if</span> <span class=nb>len</span><span class=p>(</span><span class=n>description</span><span class=p>)</span> <span class=o><=</span> <span class=mi>12</span><span class=p>:</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"invalid description=</span><span class=si>{</span><span class=n>description</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+    <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>epilog</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+        <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>epilog</span><span class=p>,</span> <span class=s2>"epilog"</span><span class=p>,</span> <span class=nb>str</span><span class=p>)</span>
+    <span class=k>if</span> <span class=nb>len</span><span class=p>(</span><span class=n>epilog</span><span class=p>)</span> <span class=o><=</span> <span class=mi>10</span><span class=p>:</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"invalid epilog=</span><span class=si>{</span><span class=n>epilog</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+    <span class=k>return</span> <span class=n>argparse</span><span class=o>.</span><span class=n>ArgumentParser</span><span class=p>(</span>
+        <span class=n>parents</span><span class=o>=</span><span class=p>[</span><span class=n>__DEFAULT_ARGUMENTS</span><span class=p>],</span> <span class=n>prog</span><span class=o>=</span><span class=n>__get_prog</span><span class=p>(</span><span class=n>file</span><span class=p>),</span>
+        <span class=n>description</span><span class=o>=</span><span class=n>description</span><span class=o>.</span><span class=n>strip</span><span class=p>(),</span>
+        <span class=n>epilog</span><span class=o>=</span><span class=sa>f</span><span class=s2>"</span><span class=si>{</span><span class=n>epilog</span><span class=o>.</span><span class=n>strip</span><span class=p>()</span><span class=si>}</span><span class=s2> </span><span class=si>{</span><span class=n>__DEFAULT_ARGUMENTS</span><span class=o>.</span><span class=n>epilog</span><span class=si>}</span><span class=s2>"</span><span class=p>,</span>
+        <span class=n>formatter_class</span><span class=o>=</span><span class=n>__DEFAULT_ARGUMENTS</span><span class=o>.</span><span class=n>formatter_class</span><span class=p>)</span></div>
+
+</pre></div><div class=clearer></div></div></div></div><div aria-label="main navigation"class=sphinxsidebar role=navigation><div class=sphinxsidebarwrapper><div id=searchbox role=search style=display:none><h3 id=searchlabel>Quick search</h3><div class=searchformwrapper><form action=../../../search.html class=search><input aria-labelledby=searchlabel autocapitalize=off autocomplete=off autocorrect=off name=q spellcheck=false><input type=submit value=Go></form></div></div><script>document.getElementById('searchbox').style.display="block"</script></div></div><div class=clearer></div></div><div aria-label="related navigation"class=related role=navigation><h3>Navigation</h3><ul><li class=right style=margin-right:10px><a title="General Index"href=../../../genindex.html>index</a><li class=right><a title="Python Module Index"href=../../../py-modindex.html>modules</a> |<li class="nav-item nav-item-0"><a href=../../../index.html>latexgit 0.8.2 documentation</a> »<li class="nav-item nav-item-1"><a href=../../index.html>Module code</a> »<li class="nav-item nav-item-this"><a href>latexgit.utils.help</a></ul></div><div class=footer role=contentinfo>© Copyright 2021-2023, Thomas Weise. Created using <a href=https://www.sphinx-doc.org/>Sphinx</a> 7.2.6.</div>

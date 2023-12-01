@@ -1,0 +1,253 @@
+<!doctype html><html data-content_root=../../../ lang=en><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0"name=viewport><title>latexgit.utils.strings — latexgit 0.8.2 documentation</title><link href="../../../_static/pygments.css?v=80d5e7a1"rel=stylesheet><link href="../../../_static/bizstyle.css?v=532c1bf3"rel=stylesheet><script src="../../../_static/documentation_options.js?v=dbee5847"></script><script src="../../../_static/doctools.js?v=888ff710"></script><script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script><script src=../../../_static/bizstyle.js></script><link href=https://thomasweise.github.io/latexgit_py/_modules/latexgit/utils/strings.html rel=canonical><link href=../../../genindex.html rel=index title=Index><link href=../../../search.html rel=search title=Search><meta content="width=device-width,initial-scale=1.0"name=viewport><body><div aria-label="related navigation"class=related role=navigation><h3>Navigation</h3><ul><li class=right style=margin-right:10px><a title="General Index"accesskey=I href=../../../genindex.html>index</a><li class=right><a title="Python Module Index"href=../../../py-modindex.html>modules</a> |<li class="nav-item nav-item-0"><a href=../../../index.html>latexgit 0.8.2 documentation</a> »<li class="nav-item nav-item-1"><a accesskey=U href=../../index.html>Module code</a> »<li class="nav-item nav-item-this"><a href>latexgit.utils.strings</a></ul></div><div class=document><div class=documentwrapper><div class=bodywrapper><div class=body role=main><h1>Source code for latexgit.utils.strings</h1><div class=highlight><pre>
+<span></span><span class=sd>"""Some utility methods for string processing."""</span>
+<span class=kn>import</span> <span class=nn>datetime</span>
+<span class=kn>import</span> <span class=nn>re</span>
+<span class=kn>import</span> <span class=nn>string</span>
+<span class=kn>from</span> <span class=nn>typing</span> <span class=kn>import</span> <span class=p>(</span>
+    <span class=n>Callable</span><span class=p>,</span>
+    <span class=n>Iterable</span><span class=p>,</span>
+    <span class=n>Pattern</span><span class=p>,</span>
+<span class=p>)</span>
+<span class=kn>from</span> <span class=nn>urllib.parse</span> <span class=kn>import</span> <span class=n>urlparse</span>
+
+<span class=kn>from</span> <span class=nn>latexgit.utils.types</span> <span class=kn>import</span> <span class=n>type_error</span>
+
+
+<div class=viewcode-block id=str_to_lines>
+<a class=viewcode-back href=../../../latexgit.utils.html#latexgit.utils.strings.str_to_lines>[docs]</a>
+<span class=k>def</span> <span class=nf>str_to_lines</span><span class=p>(</span><span class=n>text</span><span class=p>:</span> <span class=nb>str</span><span class=p>)</span> <span class=o>-></span> <span class=nb>list</span><span class=p>[</span><span class=nb>str</span><span class=p>]:</span>
+<span class=w>    </span><span class=sa>r</span><span class=sd>"""</span>
+<span class=sd>    Convert a string to an iterable of lines.</span>
+
+<span class=sd>    :param text: the original text string</span>
+<span class=sd>    :return: the lines</span>
+
+<span class=sd>    >>> str_to_lines("\n123\n  456\n789 \n 10\n\n")</span>
+<span class=sd>    ['', '123', '  456', '789 ', ' 10', '', '']</span>
+<span class=sd>    """</span>
+    <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>text</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+        <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>text</span><span class=p>,</span> <span class=s2>"text"</span><span class=p>,</span> <span class=nb>str</span><span class=p>)</span>
+    <span class=k>return</span> <span class=n>text</span><span class=o>.</span><span class=n>split</span><span class=p>(</span><span class=s2>"</span><span class=se>\n</span><span class=s2>"</span><span class=p>)</span></div>
+
+
+
+<div class=viewcode-block id=lines_to_str>
+<a class=viewcode-back href=../../../latexgit.utils.html#latexgit.utils.strings.lines_to_str>[docs]</a>
+<span class=k>def</span> <span class=nf>lines_to_str</span><span class=p>(</span><span class=n>lines</span><span class=p>:</span> <span class=n>Iterable</span><span class=p>[</span><span class=nb>str</span><span class=p>],</span>
+                 <span class=n>trailing_newline</span><span class=p>:</span> <span class=nb>bool</span> <span class=o>=</span> <span class=kc>True</span><span class=p>)</span> <span class=o>-></span> <span class=nb>str</span><span class=p>:</span>
+<span class=w>    </span><span class=sa>r</span><span class=sd>"""</span>
+<span class=sd>    Convert an iterable of strings to a single string.</span>
+
+<span class=sd>    :param lines: the lines</span>
+<span class=sd>    :param trailing_newline: should the re be a newline at the end?</span>
+<span class=sd>    :return: the single string</span>
+
+<span class=sd>    >>> lines_to_str(["a", "b", "", "c", ""], trailing_newline=True)</span>
+<span class=sd>    'a\nb\n\nc\n'</span>
+<span class=sd>    >>> lines_to_str(["a", "b", "", "c"], trailing_newline=True)</span>
+<span class=sd>    'a\nb\n\nc\n'</span>
+<span class=sd>    >>> lines_to_str(["a", "b", "", "c"], trailing_newline=False)</span>
+<span class=sd>    'a\nb\n\nc'</span>
+<span class=sd>    >>> lines_to_str(["a", "b", "", "c", ""], trailing_newline=False)</span>
+<span class=sd>    'a\nb\n\nc'</span>
+<span class=sd>    """</span>
+    <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>lines</span><span class=p>,</span> <span class=n>Iterable</span><span class=p>):</span>
+        <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>lines</span><span class=p>,</span> <span class=s2>"lines"</span><span class=p>,</span> <span class=n>Iterable</span><span class=p>)</span>
+
+    <span class=n>res</span> <span class=o>=</span> <span class=s2>"</span><span class=se>\n</span><span class=s2>"</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=n>lines</span><span class=p>)</span><span class=o>.</span><span class=n>rstrip</span><span class=p>()</span>
+    <span class=k>if</span> <span class=n>trailing_newline</span><span class=p>:</span>
+        <span class=k>return</span> <span class=n>res</span> <span class=o>+</span> <span class=s2>"</span><span class=se>\n</span><span class=s2>"</span>
+    <span class=k>return</span> <span class=n>res</span></div>
+
+
+
+<div class=viewcode-block id=enforce_non_empty_str>
+<a class=viewcode-back href=../../../latexgit.utils.html#latexgit.utils.strings.enforce_non_empty_str>[docs]</a>
+<span class=k>def</span> <span class=nf>enforce_non_empty_str</span><span class=p>(</span><span class=n>text</span><span class=p>:</span> <span class=nb>str</span><span class=p>)</span> <span class=o>-></span> <span class=nb>str</span><span class=p>:</span>
+<span class=w>    </span><span class=sd>"""</span>
+<span class=sd>    Enforce that a text is a non-empty string.</span>
+
+<span class=sd>    :param text: the text</span>
+<span class=sd>    :returns: the text</span>
+<span class=sd>    :raises TypeError: if `text` is not a `str`</span>
+<span class=sd>    :raises ValueError: if `text` is empty</span>
+<span class=sd>    """</span>
+    <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>text</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+        <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>text</span><span class=p>,</span> <span class=s2>"text"</span><span class=p>,</span> <span class=nb>str</span><span class=p>)</span>
+    <span class=k>if</span> <span class=nb>len</span><span class=p>(</span><span class=n>text</span><span class=p>)</span> <span class=o><=</span> <span class=mi>0</span><span class=p>:</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"Non-empty str expected, but got </span><span class=si>{</span><span class=n>text</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+    <span class=k>return</span> <span class=n>text</span></div>
+
+
+
+<div class=viewcode-block id=enforce_non_empty_str_without_ws>
+<a class=viewcode-back href=../../../latexgit.utils.html#latexgit.utils.strings.enforce_non_empty_str_without_ws>[docs]</a>
+<span class=k>def</span> <span class=nf>enforce_non_empty_str_without_ws</span><span class=p>(</span><span class=n>text</span><span class=p>:</span> <span class=nb>str</span><span class=p>)</span> <span class=o>-></span> <span class=nb>str</span><span class=p>:</span>
+<span class=w>    </span><span class=sd>"""</span>
+<span class=sd>    Enforce that a text is a non-empty string without white space.</span>
+
+<span class=sd>    :param text: the text</span>
+<span class=sd>    :returns: the text</span>
+<span class=sd>    :raises TypeError: if `text` is not a `str`</span>
+<span class=sd>    :raises ValueError: if `text` is empty or contains any white space</span>
+<span class=sd>        characters</span>
+<span class=sd>    """</span>
+    <span class=n>text</span> <span class=o>=</span> <span class=n>enforce_non_empty_str</span><span class=p>(</span><span class=n>text</span><span class=p>)</span>
+    <span class=k>if</span> <span class=nb>any</span><span class=p>(</span><span class=n>c</span> <span class=ow>in</span> <span class=n>text</span> <span class=k>for</span> <span class=n>c</span> <span class=ow>in</span> <span class=n>string</span><span class=o>.</span><span class=n>whitespace</span><span class=p>):</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span>
+            <span class=sa>f</span><span class=s2>"No white space allowed in string, but got </span><span class=si>{</span><span class=n>text</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+    <span class=k>return</span> <span class=n>text</span></div>
+
+
+
+<div class=viewcode-block id=datetime_to_date_str>
+<a class=viewcode-back href=../../../latexgit.utils.html#latexgit.utils.strings.datetime_to_date_str>[docs]</a>
+<span class=k>def</span> <span class=nf>datetime_to_date_str</span><span class=p>(</span><span class=n>date</span><span class=p>:</span> <span class=n>datetime</span><span class=o>.</span><span class=n>datetime</span><span class=p>)</span> <span class=o>-></span> <span class=nb>str</span><span class=p>:</span>
+<span class=w>    </span><span class=sd>"""</span>
+<span class=sd>    Convert a datetime object to a date string.</span>
+
+<span class=sd>    :param date: the date</span>
+<span class=sd>    :return: the date string</span>
+<span class=sd>    """</span>
+    <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>date</span><span class=p>,</span> <span class=n>datetime</span><span class=o>.</span><span class=n>datetime</span><span class=p>):</span>
+        <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>date</span><span class=p>,</span> <span class=s2>"date"</span><span class=p>,</span> <span class=n>datetime</span><span class=o>.</span><span class=n>datetime</span><span class=p>)</span>
+    <span class=k>return</span> <span class=n>date</span><span class=o>.</span><span class=n>strftime</span><span class=p>(</span><span class=s2>"%Y</span><span class=se>\u2011</span><span class=s2>%m</span><span class=se>\u2011</span><span class=si>%d</span><span class=s2>"</span><span class=p>)</span></div>
+
+
+
+<div class=viewcode-block id=datetime_to_datetime_str>
+<a class=viewcode-back href=../../../latexgit.utils.html#latexgit.utils.strings.datetime_to_datetime_str>[docs]</a>
+<span class=k>def</span> <span class=nf>datetime_to_datetime_str</span><span class=p>(</span><span class=n>date</span><span class=p>:</span> <span class=n>datetime</span><span class=o>.</span><span class=n>datetime</span><span class=p>)</span> <span class=o>-></span> <span class=nb>str</span><span class=p>:</span>
+<span class=w>    </span><span class=sd>"""</span>
+<span class=sd>    Convert a datetime object to a date-time string.</span>
+
+<span class=sd>    :param date: the date</span>
+<span class=sd>    :return: the date-time string</span>
+<span class=sd>    """</span>
+    <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>date</span><span class=p>,</span> <span class=n>datetime</span><span class=o>.</span><span class=n>datetime</span><span class=p>):</span>
+        <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>date</span><span class=p>,</span> <span class=s2>"date"</span><span class=p>,</span> <span class=n>datetime</span><span class=o>.</span><span class=n>datetime</span><span class=p>)</span>
+    <span class=k>return</span> <span class=n>date</span><span class=o>.</span><span class=n>strftime</span><span class=p>(</span><span class=s2>"%Y</span><span class=se>\u2011</span><span class=s2>%m</span><span class=se>\u2011</span><span class=si>%d</span><span class=se>\u00a0</span><span class=s2>%H:%M</span><span class=se>\u00a0</span><span class=s2>%Z"</span><span class=p>)</span></div>
+
+
+
+<div class=viewcode-block id=enforce_url>
+<a class=viewcode-back href=../../../latexgit.utils.html#latexgit.utils.strings.enforce_url>[docs]</a>
+<span class=k>def</span> <span class=nf>enforce_url</span><span class=p>(</span><span class=n>url</span><span class=p>:</span> <span class=nb>str</span><span class=p>)</span> <span class=o>-></span> <span class=nb>str</span><span class=p>:</span>
+<span class=w>    </span><span class=sd>"""</span>
+<span class=sd>    Enforce that a string is a valid url.</span>
+
+<span class=sd>    :param url: the url</span>
+<span class=sd>    :return: the url</span>
+<span class=sd>    """</span>
+    <span class=n>enforce_non_empty_str_without_ws</span><span class=p>(</span><span class=n>url</span><span class=p>)</span>
+    <span class=k>if</span> <span class=s2>".."</span> <span class=ow>in</span> <span class=n>url</span><span class=p>:</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"Invalid url </span><span class=si>{</span><span class=n>url</span><span class=si>!r}</span><span class=s2>, contains '..'."</span><span class=p>)</span>
+    <span class=n>res</span> <span class=o>=</span> <span class=n>urlparse</span><span class=p>(</span><span class=n>url</span><span class=p>)</span>
+    <span class=k>if</span> <span class=n>res</span><span class=o>.</span><span class=n>scheme</span> <span class=o>!=</span> <span class=s2>"ssh"</span><span class=p>:</span>
+        <span class=k>if</span> <span class=n>res</span><span class=o>.</span><span class=n>scheme</span> <span class=ow>not</span> <span class=ow>in</span> <span class=p>(</span><span class=s2>"http"</span><span class=p>,</span> <span class=s2>"https"</span><span class=p>):</span>
+            <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"Invalid scheme </span><span class=si>{</span><span class=n>res</span><span class=o>.</span><span class=n>scheme</span><span class=si>!r}</span><span class=s2> in url </span><span class=si>{</span><span class=n>url</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+        <span class=k>if</span> <span class=s2>"@"</span> <span class=ow>in</span> <span class=n>url</span><span class=p>:</span>
+            <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span>
+                <span class=sa>f</span><span class=s2>"Non-ssh URL must not contain '@', but </span><span class=si>{</span><span class=n>url</span><span class=si>!r}</span><span class=s2> does"</span><span class=p>)</span>
+    <span class=n>enforce_non_empty_str_without_ws</span><span class=p>(</span><span class=n>res</span><span class=o>.</span><span class=n>netloc</span><span class=p>)</span>
+    <span class=n>enforce_non_empty_str_without_ws</span><span class=p>(</span><span class=n>res</span><span class=o>.</span><span class=n>path</span><span class=p>)</span>
+    <span class=k>return</span> <span class=n>res</span><span class=o>.</span><span class=n>geturl</span><span class=p>()</span></div>
+
+
+
+<div class=viewcode-block id=get_prefix_str>
+<a class=viewcode-back href=../../../latexgit.utils.html#latexgit.utils.strings.get_prefix_str>[docs]</a>
+<span class=k>def</span> <span class=nf>get_prefix_str</span><span class=p>(</span><span class=n>str_list</span><span class=p>:</span> <span class=nb>tuple</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=o>...</span><span class=p>]</span> <span class=o>|</span> <span class=nb>list</span><span class=p>[</span><span class=nb>str</span><span class=p>])</span> <span class=o>-></span> <span class=nb>str</span><span class=p>:</span>
+<span class=w>    </span><span class=sa>r</span><span class=sd>"""</span>
+<span class=sd>    Compute the common prefix string.</span>
+
+<span class=sd>    :param str_list: the list of strings</span>
+<span class=sd>    :return: the common prefix</span>
+
+<span class=sd>    >>> get_prefix_str(["abc", "acd"])</span>
+<span class=sd>    'a'</span>
+<span class=sd>    >>> get_prefix_str(["xyz", "gsdf"])</span>
+<span class=sd>    ''</span>
+<span class=sd>    >>> get_prefix_str([])</span>
+<span class=sd>    ''</span>
+<span class=sd>    >>> get_prefix_str(["abx"])</span>
+<span class=sd>    'abx'</span>
+<span class=sd>    >>> get_prefix_str(("\\relative.path", "\\relative.figure",</span>
+<span class=sd>    ...     "\\relative.code"))</span>
+<span class=sd>    '\\relative.'</span>
+<span class=sd>    """</span>
+    <span class=k>if</span> <span class=nb>len</span><span class=p>(</span><span class=n>str_list</span><span class=p>)</span> <span class=o><=</span> <span class=mi>0</span><span class=p>:</span>
+        <span class=k>return</span> <span class=s2>""</span>
+    <span class=n>prefix_str</span> <span class=o>=</span> <span class=s2>""</span>
+    <span class=n>len_smallest_str</span> <span class=o>=</span> <span class=nb>min</span><span class=p>([</span><span class=nb>len</span><span class=p>(</span><span class=n>str_mem</span><span class=p>)</span> <span class=k>for</span> <span class=n>str_mem</span> <span class=ow>in</span> <span class=n>str_list</span><span class=p>])</span>
+    <span class=n>str_list_0</span> <span class=o>=</span> <span class=n>str_list</span><span class=p>[</span><span class=mi>0</span><span class=p>]</span>
+    <span class=k>for</span> <span class=n>i</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=n>len_smallest_str</span><span class=p>):</span>
+        <span class=n>f</span> <span class=o>=</span> <span class=n>str_list_0</span><span class=p>[</span><span class=n>i</span><span class=p>]</span>
+        <span class=k>if</span> <span class=nb>len</span><span class=p>([</span><span class=mi>0</span> <span class=k>for</span> <span class=n>ind</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>1</span><span class=p>,</span> <span class=nb>len</span><span class=p>(</span><span class=n>str_list</span><span class=p>))</span>
+                <span class=k>if</span> <span class=n>f</span> <span class=o>!=</span> <span class=n>str_list</span><span class=p>[</span><span class=n>ind</span><span class=p>][</span><span class=n>i</span><span class=p>]])</span> <span class=o>></span> <span class=mi>0</span><span class=p>:</span>
+            <span class=k>break</span>
+        <span class=n>prefix_str</span> <span class=o>+=</span> <span class=n>f</span>
+    <span class=k>return</span> <span class=n>prefix_str</span></div>
+
+
+
+<div class=viewcode-block id=regex_sub>
+<a class=viewcode-back href=../../../latexgit.utils.html#latexgit.utils.strings.regex_sub>[docs]</a>
+<span class=k>def</span> <span class=nf>regex_sub</span><span class=p>(</span><span class=n>search</span><span class=p>:</span> <span class=nb>str</span> <span class=o>|</span> <span class=n>Pattern</span><span class=p>,</span>
+              <span class=n>replace</span><span class=p>:</span> <span class=n>Callable</span> <span class=o>|</span> <span class=nb>str</span><span class=p>,</span>
+              <span class=n>inside</span><span class=p>:</span> <span class=nb>str</span><span class=p>)</span> <span class=o>-></span> <span class=nb>str</span><span class=p>:</span>
+<span class=w>    </span><span class=sa>r</span><span class=sd>"""</span>
+<span class=sd>    Replace all occurrences of 'search' in 'inside' with 'replace'.</span>
+
+<span class=sd>    :param search: the regular expression to search</span>
+<span class=sd>    :param replace: the regular expression to replace it with</span>
+<span class=sd>    :param inside: the string in which to search/replace</span>
+<span class=sd>    :return: the new string after the recursive replacement</span>
+
+<span class=sd>    >>> regex_sub('[ \t]+\n', '\n', ' bla \nxyz\tabc\t\n')</span>
+<span class=sd>    ' bla\nxyz\tabc\n'</span>
+<span class=sd>    >>> regex_sub('[0-9]A', 'X', '23A7AA')</span>
+<span class=sd>    '2XXA'</span>
+<span class=sd>    """</span>
+    <span class=k>while</span> <span class=kc>True</span><span class=p>:</span>
+        <span class=n>text</span> <span class=o>=</span> <span class=n>re</span><span class=o>.</span><span class=n>sub</span><span class=p>(</span>
+            <span class=n>search</span><span class=p>,</span> <span class=n>replace</span><span class=p>,</span> <span class=n>inside</span><span class=p>,</span>
+            <span class=n>flags</span><span class=o>=</span><span class=mi>0</span> <span class=k>if</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>search</span><span class=p>,</span> <span class=n>Pattern</span><span class=p>)</span> <span class=k>else</span> <span class=n>re</span><span class=o>.</span><span class=n>MULTILINE</span><span class=p>)</span>
+        <span class=k>if</span> <span class=n>text</span> <span class=ow>is</span> <span class=n>inside</span><span class=p>:</span>
+            <span class=k>return</span> <span class=n>inside</span>
+        <span class=n>inside</span> <span class=o>=</span> <span class=n>text</span></div>
+
+
+
+<div class=viewcode-block id=replace_all>
+<a class=viewcode-back href=../../../latexgit.utils.html#latexgit.utils.strings.replace_all>[docs]</a>
+<span class=k>def</span> <span class=nf>replace_all</span><span class=p>(</span><span class=n>find</span><span class=p>:</span> <span class=nb>str</span><span class=p>,</span> <span class=n>replace</span><span class=p>:</span> <span class=nb>str</span><span class=p>,</span> <span class=n>src</span><span class=p>:</span> <span class=nb>str</span><span class=p>)</span> <span class=o>-></span> <span class=nb>str</span><span class=p>:</span>
+<span class=w>    </span><span class=sd>"""</span>
+<span class=sd>    Perform a recursive replacement of strings.</span>
+
+<span class=sd>    After applying this function, there will not be any occurence of `find`</span>
+<span class=sd>    left in `src`. All of them will have been replaced by `replace`. If that</span>
+<span class=sd>    produces new instances of `find`, these will be replaced as well.</span>
+<span class=sd>    If `replace` contains `find`, this will lead to an endless loop!</span>
+
+<span class=sd>    :param find: the string to find</span>
+<span class=sd>    :param replace: the string with which it will be replaced</span>
+<span class=sd>    :param src: the string in which we search</span>
+<span class=sd>    :return: the string `src`, with all occurrences of find replaced by replace</span>
+
+<span class=sd>    >>> replace_all("a", "b", "abc")</span>
+<span class=sd>    'bbc'</span>
+<span class=sd>    >>> replace_all("aa", "a", "aaaaa")</span>
+<span class=sd>    'a'</span>
+<span class=sd>    >>> replace_all("aba", "a", "abaababa")</span>
+<span class=sd>    'aa'</span>
+<span class=sd>    """</span>
+    <span class=n>new_len</span> <span class=o>=</span> <span class=nb>len</span><span class=p>(</span><span class=n>src</span><span class=p>)</span>
+    <span class=k>while</span> <span class=kc>True</span><span class=p>:</span>
+        <span class=n>src</span> <span class=o>=</span> <span class=n>src</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=n>find</span><span class=p>,</span> <span class=n>replace</span><span class=p>)</span>
+        <span class=n>old_len</span> <span class=o>=</span> <span class=n>new_len</span>
+        <span class=n>new_len</span> <span class=o>=</span> <span class=nb>len</span><span class=p>(</span><span class=n>src</span><span class=p>)</span>
+        <span class=k>if</span> <span class=n>new_len</span> <span class=o>>=</span> <span class=n>old_len</span><span class=p>:</span>
+            <span class=k>return</span> <span class=n>src</span></div>
+
+</pre></div><div class=clearer></div></div></div></div><div aria-label="main navigation"class=sphinxsidebar role=navigation><div class=sphinxsidebarwrapper><div id=searchbox role=search style=display:none><h3 id=searchlabel>Quick search</h3><div class=searchformwrapper><form action=../../../search.html class=search><input aria-labelledby=searchlabel autocapitalize=off autocomplete=off autocorrect=off name=q spellcheck=false><input type=submit value=Go></form></div></div><script>document.getElementById('searchbox').style.display="block"</script></div></div><div class=clearer></div></div><div aria-label="related navigation"class=related role=navigation><h3>Navigation</h3><ul><li class=right style=margin-right:10px><a title="General Index"href=../../../genindex.html>index</a><li class=right><a title="Python Module Index"href=../../../py-modindex.html>modules</a> |<li class="nav-item nav-item-0"><a href=../../../index.html>latexgit 0.8.2 documentation</a> »<li class="nav-item nav-item-1"><a href=../../index.html>Module code</a> »<li class="nav-item nav-item-this"><a href>latexgit.utils.strings</a></ul></div><div class=footer role=contentinfo>© Copyright 2021-2023, Thomas Weise. Created using <a href=https://www.sphinx-doc.org/>Sphinx</a> 7.2.6.</div>

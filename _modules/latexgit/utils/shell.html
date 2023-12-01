@@ -1,0 +1,107 @@
+<!doctype html><html data-content_root=../../../ lang=en><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0"name=viewport><title>latexgit.utils.shell — latexgit 0.8.2 documentation</title><link href="../../../_static/pygments.css?v=80d5e7a1"rel=stylesheet><link href="../../../_static/bizstyle.css?v=532c1bf3"rel=stylesheet><script src="../../../_static/documentation_options.js?v=dbee5847"></script><script src="../../../_static/doctools.js?v=888ff710"></script><script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script><script src=../../../_static/bizstyle.js></script><link href=https://thomasweise.github.io/latexgit_py/_modules/latexgit/utils/shell.html rel=canonical><link href=../../../genindex.html rel=index title=Index><link href=../../../search.html rel=search title=Search><meta content="width=device-width,initial-scale=1.0"name=viewport><body><div aria-label="related navigation"class=related role=navigation><h3>Navigation</h3><ul><li class=right style=margin-right:10px><a title="General Index"accesskey=I href=../../../genindex.html>index</a><li class=right><a title="Python Module Index"href=../../../py-modindex.html>modules</a> |<li class="nav-item nav-item-0"><a href=../../../index.html>latexgit 0.8.2 documentation</a> »<li class="nav-item nav-item-1"><a accesskey=U href=../../index.html>Module code</a> »<li class="nav-item nav-item-this"><a href>latexgit.utils.shell</a></ul></div><div class=document><div class=documentwrapper><div class=bodywrapper><div class=body role=main><h1>Source code for latexgit.utils.shell</h1><div class=highlight><pre>
+<span></span><span class=sd>"""The tool for invoking shell commands."""</span>
+
+<span class=kn>import</span> <span class=nn>subprocess</span>  <span class=c1># nosec</span>
+<span class=kn>from</span> <span class=nn>typing</span> <span class=kn>import</span> <span class=n>Any</span><span class=p>,</span> <span class=n>Callable</span><span class=p>,</span> <span class=n>Final</span><span class=p>,</span> <span class=n>Iterable</span>
+
+<span class=kn>from</span> <span class=nn>latexgit.utils.console</span> <span class=kn>import</span> <span class=n>logger</span>
+<span class=kn>from</span> <span class=nn>latexgit.utils.path</span> <span class=kn>import</span> <span class=n>Path</span>
+<span class=kn>from</span> <span class=nn>latexgit.utils.types</span> <span class=kn>import</span> <span class=n>check_int_range</span><span class=p>,</span> <span class=n>type_error</span>
+
+
+<div class=viewcode-block id=shell>
+<a class=viewcode-back href=../../../latexgit.utils.html#latexgit.utils.shell.shell>[docs]</a>
+<span class=k>def</span> <span class=nf>shell</span><span class=p>(</span><span class=n>command</span><span class=p>:</span> <span class=nb>str</span> <span class=o>|</span> <span class=n>Iterable</span><span class=p>[</span><span class=nb>str</span><span class=p>],</span>
+          <span class=n>timeout</span><span class=p>:</span> <span class=nb>int</span> <span class=o>=</span> <span class=mi>3600</span><span class=p>,</span>
+          <span class=n>cwd</span><span class=p>:</span> <span class=nb>str</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=kc>None</span><span class=p>,</span>
+          <span class=n>wants_stdout</span><span class=p>:</span> <span class=nb>bool</span> <span class=o>=</span> <span class=kc>False</span><span class=p>,</span>
+          <span class=n>exit_code_to_str</span><span class=p>:</span> <span class=nb>dict</span><span class=p>[</span><span class=nb>int</span><span class=p>,</span> <span class=nb>str</span><span class=p>]</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=kc>None</span><span class=p>,</span>
+          <span class=n>check_stderr</span><span class=p>:</span> <span class=n>Callable</span><span class=p>[[</span><span class=nb>str</span><span class=p>],</span> <span class=ne>BaseException</span> <span class=o>|</span> <span class=kc>None</span><span class=p>]</span>
+          <span class=o>=</span> <span class=k>lambda</span> <span class=n>_</span><span class=p>:</span> <span class=kc>None</span><span class=p>,</span>
+          <span class=n>stdin</span><span class=p>:</span> <span class=nb>str</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=kc>None</span><span class=p>)</span> <span class=o>-></span> <span class=nb>str</span> <span class=o>|</span> <span class=kc>None</span><span class=p>:</span>
+<span class=w>    </span><span class=sd>"""</span>
+<span class=sd>    Execute a text-based command on the shell.</span>
+
+<span class=sd>    The command is executed and its stdout and stderr and return code are</span>
+<span class=sd>    captured. If the command had a non-zero exit code, an exception is</span>
+<span class=sd>    thrown. The command itself, as well as the parameters are logged via</span>
+<span class=sd>    the logger. If `wants_stdout` is `True`, the command's stdout is returned.</span>
+<span class=sd>    Otherwise, `None` is returned.</span>
+
+<span class=sd>    :param command: the command to execute</span>
+<span class=sd>    :param timeout: the timeout in seconds</span>
+<span class=sd>    :param cwd: the directory to run inside</span>
+<span class=sd>    :param wants_stdout: if `True`, the stdout is returned, if `False`,</span>
+<span class=sd>        `None` is returned</span>
+<span class=sd>    :param exit_code_to_str: an optional map</span>
+<span class=sd>        converting erroneous exit codes to strings</span>
+<span class=sd>    :param check_stderr: an optional callable that is applied to the std_err</span>
+<span class=sd>        string and may raise an exception if need be</span>
+<span class=sd>    :param stdin: optional data to be written to stdin</span>
+<span class=sd>    """</span>
+    <span class=n>check_int_range</span><span class=p>(</span><span class=n>timeout</span><span class=p>,</span> <span class=s2>"timeout"</span><span class=p>,</span> <span class=mi>1</span><span class=p>,</span> <span class=mi>360_000_000</span><span class=p>)</span>
+    <span class=k>if</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>command</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+        <span class=n>command</span> <span class=o>=</span> <span class=p>[</span><span class=n>command</span><span class=p>]</span>
+    <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>command</span><span class=p>,</span> <span class=n>Iterable</span><span class=p>):</span>
+        <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>command</span><span class=p>,</span> <span class=s2>"command"</span><span class=p>,</span> <span class=n>Iterable</span><span class=p>)</span>
+
+    <span class=n>cmd</span> <span class=o>=</span> <span class=p>[</span><span class=nb>str</span><span class=p>(</span><span class=n>s</span><span class=p>)</span><span class=o>.</span><span class=n>strip</span><span class=p>()</span> <span class=k>for</span> <span class=n>s</span> <span class=ow>in</span> <span class=n>command</span><span class=p>]</span>
+    <span class=n>cmd</span> <span class=o>=</span> <span class=p>[</span><span class=n>s</span> <span class=k>for</span> <span class=n>s</span> <span class=ow>in</span> <span class=n>cmd</span> <span class=k>if</span> <span class=nb>len</span><span class=p>(</span><span class=n>s</span><span class=p>)</span> <span class=o>></span> <span class=mi>0</span><span class=p>]</span>
+    <span class=n>execstr</span><span class=p>:</span> <span class=nb>str</span> <span class=o>=</span> <span class=s2>" "</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=nb>repr</span><span class=p>(</span><span class=n>c</span><span class=p>)</span> <span class=k>for</span> <span class=n>c</span> <span class=ow>in</span> <span class=n>cmd</span><span class=p>)</span>
+    <span class=k>if</span> <span class=p>(</span><span class=nb>len</span><span class=p>(</span><span class=n>cmd</span><span class=p>)</span> <span class=o><=</span> <span class=mi>0</span><span class=p>)</span> <span class=ow>or</span> <span class=p>(</span><span class=nb>len</span><span class=p>(</span><span class=n>execstr</span><span class=p>)</span> <span class=o><=</span> <span class=mi>0</span><span class=p>):</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"Command </span><span class=si>{</span><span class=n>execstr</span><span class=si>!r}</span><span class=s2> empty after stripping!"</span><span class=p>)</span>
+
+    <span class=n>arguments</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>dict</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=n>Any</span><span class=p>]]</span> <span class=o>=</span> <span class=p>{}</span>
+
+    <span class=k>if</span> <span class=n>cwd</span> <span class=ow>is</span> <span class=ow>not</span> <span class=kc>None</span><span class=p>:</span>
+        <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>cwd</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+            <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>cwd</span><span class=p>,</span> <span class=s2>"cwd"</span><span class=p>,</span> <span class=nb>str</span><span class=p>)</span>
+        <span class=n>wd</span> <span class=o>=</span> <span class=n>Path</span><span class=o>.</span><span class=n>directory</span><span class=p>(</span><span class=n>cwd</span><span class=p>)</span>
+        <span class=n>execstr</span> <span class=o>=</span> <span class=sa>f</span><span class=s2>"</span><span class=si>{</span><span class=n>execstr</span><span class=si>}</span><span class=s2> in </span><span class=si>{</span><span class=n>wd</span><span class=si>!r}</span><span class=s2>"</span>
+        <span class=n>arguments</span><span class=p>[</span><span class=s2>"cwd"</span><span class=p>]</span> <span class=o>=</span> <span class=n>wd</span>
+
+    <span class=k>if</span> <span class=n>stdin</span> <span class=ow>is</span> <span class=ow>not</span> <span class=kc>None</span><span class=p>:</span>
+        <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>stdin</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+            <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>stdin</span><span class=p>,</span> <span class=s2>"stdin"</span><span class=p>,</span> <span class=nb>str</span><span class=p>)</span>
+        <span class=n>arguments</span><span class=p>[</span><span class=s2>"input"</span><span class=p>]</span> <span class=o>=</span> <span class=n>stdin</span>
+
+    <span class=c1># nosemgrep</span>
+    <span class=n>ret</span> <span class=o>=</span> <span class=n>subprocess</span><span class=o>.</span><span class=n>run</span><span class=p>(</span>  <span class=c1># nosec # noqa</span>
+        <span class=n>args</span><span class=o>=</span><span class=n>cmd</span><span class=p>,</span> <span class=n>check</span><span class=o>=</span><span class=kc>False</span><span class=p>,</span> <span class=n>text</span><span class=o>=</span><span class=kc>True</span><span class=p>,</span> <span class=n>timeout</span><span class=o>=</span><span class=n>timeout</span><span class=p>,</span>  <span class=c1># nosec # noqa</span>
+        <span class=n>capture_output</span><span class=o>=</span><span class=kc>True</span><span class=p>,</span> <span class=o>**</span><span class=n>arguments</span><span class=p>)</span>  <span class=c1># nosec # noqa</span>
+
+    <span class=n>logging</span> <span class=o>=</span> <span class=p>[</span><span class=sa>f</span><span class=s2>"finished executing </span><span class=si>{</span><span class=n>execstr</span><span class=si>}</span><span class=s2>."</span><span class=p>,</span>
+               <span class=sa>f</span><span class=s2>"obtained return value </span><span class=si>{</span><span class=n>ret</span><span class=o>.</span><span class=n>returncode</span><span class=si>}</span><span class=s2>."</span><span class=p>]</span>
+
+    <span class=k>if</span> <span class=p>(</span><span class=n>ret</span><span class=o>.</span><span class=n>returncode</span> <span class=o>!=</span> <span class=mi>0</span><span class=p>)</span> <span class=ow>and</span> <span class=n>exit_code_to_str</span><span class=p>:</span>
+        <span class=n>ec</span><span class=p>:</span> <span class=nb>str</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=n>exit_code_to_str</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=n>ret</span><span class=o>.</span><span class=n>returncode</span><span class=p>,</span> <span class=kc>None</span><span class=p>)</span>
+        <span class=k>if</span> <span class=n>ec</span><span class=p>:</span>
+            <span class=n>logging</span><span class=o>.</span><span class=n>append</span><span class=p>(</span><span class=sa>f</span><span class=s2>"meaning of return value: </span><span class=si>{</span><span class=n>ec</span><span class=si>}</span><span class=s2>"</span><span class=p>)</span>
+
+    <span class=n>stdout</span> <span class=o>=</span> <span class=n>ret</span><span class=o>.</span><span class=n>stdout</span>
+    <span class=k>if</span> <span class=n>stdout</span><span class=p>:</span>
+        <span class=n>stdout</span> <span class=o>=</span> <span class=n>stdout</span><span class=o>.</span><span class=n>strip</span><span class=p>()</span>
+        <span class=k>if</span> <span class=n>stdout</span><span class=p>:</span>
+            <span class=n>logging</span><span class=o>.</span><span class=n>append</span><span class=p>(</span><span class=sa>f</span><span class=s2>"</span><span class=se>\n</span><span class=s2>stdout:</span><span class=se>\n</span><span class=si>{</span><span class=n>stdout</span><span class=si>}</span><span class=s2>"</span><span class=p>)</span>
+    <span class=k>else</span><span class=p>:</span>
+        <span class=n>stdout</span> <span class=o>=</span> <span class=s2>""</span>
+
+    <span class=n>stderr</span> <span class=o>=</span> <span class=n>ret</span><span class=o>.</span><span class=n>stderr</span>
+    <span class=k>if</span> <span class=n>stderr</span><span class=p>:</span>
+        <span class=n>stderr</span> <span class=o>=</span> <span class=n>stderr</span><span class=o>.</span><span class=n>strip</span><span class=p>()</span>
+        <span class=k>if</span> <span class=n>stderr</span><span class=p>:</span>
+            <span class=n>logging</span><span class=o>.</span><span class=n>append</span><span class=p>(</span><span class=sa>f</span><span class=s2>"</span><span class=se>\n</span><span class=s2>stderr:</span><span class=se>\n</span><span class=si>{</span><span class=n>stderr</span><span class=si>}</span><span class=s2>"</span><span class=p>)</span>
+    <span class=n>logger</span><span class=p>(</span><span class=s2>"</span><span class=se>\n</span><span class=s2>"</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=n>logging</span><span class=p>))</span>
+
+    <span class=k>if</span> <span class=n>ret</span><span class=o>.</span><span class=n>returncode</span> <span class=o>!=</span> <span class=mi>0</span><span class=p>:</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span>
+            <span class=sa>f</span><span class=s2>"Error </span><span class=si>{</span><span class=n>ret</span><span class=o>.</span><span class=n>returncode</span><span class=si>}</span><span class=s2> when executing </span><span class=si>{</span><span class=n>execstr</span><span class=si>}</span><span class=s2> compressor."</span><span class=p>)</span>
+
+    <span class=k>if</span> <span class=n>stderr</span><span class=p>:</span>
+        <span class=n>exception</span> <span class=o>=</span> <span class=n>check_stderr</span><span class=p>(</span><span class=n>stderr</span><span class=p>)</span>
+        <span class=k>if</span> <span class=n>exception</span> <span class=ow>is</span> <span class=ow>not</span> <span class=kc>None</span><span class=p>:</span>
+            <span class=k>raise</span> <span class=n>exception</span>
+
+    <span class=k>return</span> <span class=n>stdout</span> <span class=k>if</span> <span class=n>wants_stdout</span> <span class=k>else</span> <span class=kc>None</span></div>
+
+</pre></div><div class=clearer></div></div></div></div><div aria-label="main navigation"class=sphinxsidebar role=navigation><div class=sphinxsidebarwrapper><div id=searchbox role=search style=display:none><h3 id=searchlabel>Quick search</h3><div class=searchformwrapper><form action=../../../search.html class=search><input aria-labelledby=searchlabel autocapitalize=off autocomplete=off autocorrect=off name=q spellcheck=false><input type=submit value=Go></form></div></div><script>document.getElementById('searchbox').style.display="block"</script></div></div><div class=clearer></div></div><div aria-label="related navigation"class=related role=navigation><h3>Navigation</h3><ul><li class=right style=margin-right:10px><a title="General Index"href=../../../genindex.html>index</a><li class=right><a title="Python Module Index"href=../../../py-modindex.html>modules</a> |<li class="nav-item nav-item-0"><a href=../../../index.html>latexgit 0.8.2 documentation</a> »<li class="nav-item nav-item-1"><a href=../../index.html>Module code</a> »<li class="nav-item nav-item-this"><a href>latexgit.utils.shell</a></ul></div><div class=footer role=contentinfo>© Copyright 2021-2023, Thomas Weise. Created using <a href=https://www.sphinx-doc.org/>Sphinx</a> 7.2.6.</div>
