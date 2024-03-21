@@ -1,0 +1,91 @@
+<!doctype html><html data-content_root=../../../ lang=en><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0"name=viewport><title>latexgit.repository.gitmanager — latexgit 0.8.11 documentation</title><link href="../../../_static/pygments.css?v=80d5e7a1"rel=stylesheet><link href="../../../_static/bizstyle.css?v=532c1bf3"rel=stylesheet><script src="../../../_static/documentation_options.js?v=9a7586e3"></script><script src="../../../_static/doctools.js?v=888ff710"></script><script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script><script src=../../../_static/bizstyle.js></script><link href=https://thomasweise.github.io/latexgit_py/_modules/latexgit/repository/gitmanager.html rel=canonical><link href=../../../genindex.html rel=index title=Index><link href=../../../search.html rel=search title=Search><meta content="width=device-width,initial-scale=1.0"name=viewport><body><div aria-label="related navigation"class=related role=navigation><h3>Navigation</h3><ul><li class=right style=margin-right:10px><a title="General Index"accesskey=I href=../../../genindex.html>index</a><li class=right><a title="Python Module Index"href=../../../py-modindex.html>modules</a> |<li class="nav-item nav-item-0"><a href=../../../index.html>latexgit 0.8.11 documentation</a> »<li class="nav-item nav-item-1"><a accesskey=U href=../../index.html>Module code</a> »<li class="nav-item nav-item-this"><a href>latexgit.repository.gitmanager</a></ul></div><div class=document><div class=documentwrapper><div class=bodywrapper><div class=body role=main><h1>Source code for latexgit.repository.gitmanager</h1><div class=highlight><pre>
+<span></span><span class=sd>"""</span>
+<span class=sd>A manager for repository repositories.</span>
+
+<span class=sd>This class allows to maintain a local stash of repository repositories that</span>
+<span class=sd>can consistently be accessed without loading any repository multiple</span>
+<span class=sd>times.</span>
+<span class=sd>"""</span>
+
+<span class=kn>from</span> <span class=nn>os</span> <span class=kn>import</span> <span class=n>listdir</span><span class=p>,</span> <span class=n>rmdir</span>
+<span class=kn>from</span> <span class=nn>tempfile</span> <span class=kn>import</span> <span class=n>mkdtemp</span>
+<span class=kn>from</span> <span class=nn>typing</span> <span class=kn>import</span> <span class=n>Final</span>
+
+<span class=kn>from</span> <span class=nn>pycommons.io.path</span> <span class=kn>import</span> <span class=n>Path</span><span class=p>,</span> <span class=n>directory_path</span>
+<span class=kn>from</span> <span class=nn>pycommons.net.url</span> <span class=kn>import</span> <span class=n>URL</span>
+<span class=kn>from</span> <span class=nn>pycommons.types</span> <span class=kn>import</span> <span class=n>type_error</span>
+
+<span class=kn>from</span> <span class=nn>latexgit.repository.git</span> <span class=kn>import</span> <span class=n>GitRepository</span>
+
+
+<div class=viewcode-block id=GitManager>
+<a class=viewcode-back href=../../../latexgit.repository.html#latexgit.repository.gitmanager.GitManager>[docs]</a>
+<span class=k>class</span> <span class=nc>GitManager</span><span class=p>:</span>
+<span class=w>    </span><span class=sd>"""A git repository manager can provide a set of git repositories."""</span>
+
+    <span class=k>def</span> <span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>base_dir</span><span class=p>:</span> <span class=nb>str</span><span class=p>)</span> <span class=o>-></span> <span class=kc>None</span><span class=p>:</span>
+<span class=w>        </span><span class=sd>"""</span>
+<span class=sd>        Set up the git repository manager.</span>
+
+<span class=sd>        :param base_dir: the base directory</span>
+<span class=sd>        """</span>
+        <span class=c1>#: the base directory of the repository manager</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>base_dir</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>Path</span><span class=p>]</span> <span class=o>=</span> <span class=n>Path</span><span class=p>(</span><span class=n>base_dir</span><span class=p>)</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>base_dir</span><span class=o>.</span><span class=n>ensure_dir_exists</span><span class=p>()</span>
+        <span class=c1>#: the internal set of github repositories</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__repos</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>dict</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=n>GitRepository</span><span class=p>]]</span> <span class=o>=</span> <span class=p>{}</span>
+
+        <span class=c1>#: load all the repository repositories</span>
+        <span class=k>for</span> <span class=n>thedir</span> <span class=ow>in</span> <span class=n>listdir</span><span class=p>(</span><span class=bp>self</span><span class=o>.</span><span class=n>base_dir</span><span class=p>):</span>
+            <span class=n>fullpath</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>base_dir</span><span class=o>.</span><span class=n>resolve_inside</span><span class=p>(</span><span class=n>thedir</span><span class=p>)</span>
+            <span class=k>if</span> <span class=n>fullpath</span><span class=o>.</span><span class=n>is_dir</span><span class=p>()</span> <span class=ow>and</span> <span class=n>fullpath</span><span class=o>.</span><span class=n>resolve_inside</span><span class=p>(</span><span class=s2>".git"</span><span class=p>)</span><span class=o>.</span><span class=n>is_dir</span><span class=p>():</span>
+                <span class=n>gr</span><span class=p>:</span> <span class=n>GitRepository</span> <span class=o>=</span> <span class=n>GitRepository</span><span class=o>.</span><span class=n>from_local</span><span class=p>(</span><span class=n>fullpath</span><span class=p>)</span>
+                <span class=bp>self</span><span class=o>.</span><span class=n>__repos</span><span class=p>[</span><span class=n>gr</span><span class=o>.</span><span class=n>url</span><span class=p>]</span> <span class=o>=</span> <span class=n>gr</span>
+
+<div class=viewcode-block id=GitManager.get_repo>
+<a class=viewcode-back href=../../../latexgit.repository.html#latexgit.repository.gitmanager.GitManager.get_repo>[docs]</a>
+    <span class=k>def</span> <span class=nf>get_repo</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>url</span><span class=p>:</span> <span class=nb>str</span><span class=p>)</span> <span class=o>-></span> <span class=n>GitRepository</span><span class=p>:</span>
+<span class=w>        </span><span class=sd>"""</span>
+<span class=sd>        Get the git repository for the given URL.</span>
+
+<span class=sd>        :param url: the URL to load</span>
+<span class=sd>        :return: the repository</span>
+<span class=sd>        """</span>
+        <span class=n>url</span> <span class=o>=</span> <span class=n>URL</span><span class=p>(</span><span class=n>url</span><span class=p>)</span>
+        <span class=k>if</span> <span class=n>url</span> <span class=ow>in</span> <span class=bp>self</span><span class=o>.</span><span class=n>__repos</span><span class=p>:</span>
+            <span class=k>return</span> <span class=bp>self</span><span class=o>.</span><span class=n>__repos</span><span class=p>[</span><span class=n>url</span><span class=p>]</span>
+
+        <span class=n>dirpath</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>Path</span><span class=p>]</span> <span class=o>=</span> <span class=n>directory_path</span><span class=p>(</span><span class=n>mkdtemp</span><span class=p>(</span>
+            <span class=nb>dir</span><span class=o>=</span><span class=bp>self</span><span class=o>.</span><span class=n>base_dir</span><span class=p>,</span> <span class=n>prefix</span><span class=o>=</span><span class=s2>"git_"</span><span class=p>))</span>
+        <span class=k>try</span><span class=p>:</span>
+            <span class=n>gt</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>GitRepository</span><span class=p>]</span> <span class=o>=</span> <span class=n>GitRepository</span><span class=o>.</span><span class=n>download</span><span class=p>(</span><span class=n>url</span><span class=p>,</span> <span class=n>dirpath</span><span class=p>)</span>
+        <span class=k>except</span> <span class=ne>ValueError</span><span class=p>:</span>
+            <span class=n>rmdir</span><span class=p>(</span><span class=n>dirpath</span><span class=p>)</span>
+            <span class=k>raise</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__repos</span><span class=p>[</span><span class=n>gt</span><span class=o>.</span><span class=n>url</span><span class=p>]</span> <span class=o>=</span> <span class=n>gt</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__repos</span><span class=p>[</span><span class=n>url</span><span class=p>]</span> <span class=o>=</span> <span class=n>gt</span>
+        <span class=k>return</span> <span class=n>gt</span></div>
+
+
+<div class=viewcode-block id=GitManager.get_file_and_url>
+<a class=viewcode-back href=../../../latexgit.repository.html#latexgit.repository.gitmanager.GitManager.get_file_and_url>[docs]</a>
+    <span class=k>def</span> <span class=nf>get_file_and_url</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>repo_url</span><span class=p>:</span> <span class=nb>str</span><span class=p>,</span> <span class=n>relative_path</span><span class=p>:</span> <span class=nb>str</span><span class=p>)</span> \
+            <span class=o>-></span> <span class=nb>tuple</span><span class=p>[</span><span class=n>Path</span><span class=p>,</span> <span class=nb>str</span><span class=p>]:</span>
+<span class=w>        </span><span class=sd>"""</span>
+<span class=sd>        Get a path to a file from the given git repository and also the URL.</span>
+
+<span class=sd>        :param repo_url: the repository url.</span>
+<span class=sd>        :param relative_path: the relative path</span>
+<span class=sd>        :return: a tuple of file and URL</span>
+<span class=sd>        """</span>
+        <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>relative_path</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+            <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>relative_path</span><span class=p>,</span> <span class=s2>"relative_path"</span><span class=p>,</span> <span class=nb>str</span><span class=p>)</span>
+        <span class=n>repo</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>GitRepository</span><span class=p>]</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>get_repo</span><span class=p>(</span><span class=n>repo_url</span><span class=p>)</span>
+        <span class=n>file</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>Path</span><span class=p>]</span> <span class=o>=</span> <span class=n>repo</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>resolve_inside</span><span class=p>(</span>
+            <span class=n>relative_path</span><span class=p>)</span>
+        <span class=n>file</span><span class=o>.</span><span class=n>enforce_file</span><span class=p>()</span>
+        <span class=n>url</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>str</span><span class=p>]</span> <span class=o>=</span> <span class=n>repo</span><span class=o>.</span><span class=n>make_url</span><span class=p>(</span><span class=n>relative_path</span><span class=p>)</span>
+        <span class=k>return</span> <span class=n>file</span><span class=p>,</span> <span class=n>url</span></div>
+</div>
+
+</pre></div><div class=clearer></div></div></div></div><div aria-label="main navigation"class=sphinxsidebar role=navigation><div class=sphinxsidebarwrapper><div id=searchbox role=search style=display:none><h3 id=searchlabel>Quick search</h3><div class=searchformwrapper><form action=../../../search.html class=search><input aria-labelledby=searchlabel autocapitalize=off autocomplete=off autocorrect=off name=q spellcheck=false><input type=submit value=Go></form></div></div><script>document.getElementById(`searchbox`).style.display=`block`</script></div></div><div class=clearer></div></div><div aria-label="related navigation"class=related role=navigation><h3>Navigation</h3><ul><li class=right style=margin-right:10px><a title="General Index"href=../../../genindex.html>index</a><li class=right><a title="Python Module Index"href=../../../py-modindex.html>modules</a> |<li class="nav-item nav-item-0"><a href=../../../index.html>latexgit 0.8.11 documentation</a> »<li class="nav-item nav-item-1"><a href=../../index.html>Module code</a> »<li class="nav-item nav-item-this"><a href>latexgit.repository.gitmanager</a></ul></div><div class=footer role=contentinfo>© Copyright 2023-2024, Thomas Weise.</div>

@@ -1,0 +1,7 @@
+latexgit
+========
+
+.. toctree::
+   :maxdepth: 4
+
+   latexgit
