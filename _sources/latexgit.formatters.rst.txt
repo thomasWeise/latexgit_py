@@ -1,0 +1,26 @@
+latexgit.formatters package
+===========================
+
+.. automodule:: latexgit.formatters
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Submodules
+----------
+
+latexgit.formatters.python module
+---------------------------------
+
+.. automodule:: latexgit.formatters.python
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+latexgit.formatters.source\_tools module
+----------------------------------------
+
+.. automodule:: latexgit.formatters.source_tools
+   :members:
+   :undoc-members:
+   :show-inheritance:
