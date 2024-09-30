@@ -1,0 +1,344 @@
+<!doctype html><html data-content_root=../../../ lang=en><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0"name=viewport><title>latexgit.repository.processed — latexgit 0.8.22 documentation</title><link href="../../../_static/pygments.css?v=80d5e7a1"rel=stylesheet><link href="../../../_static/bizstyle.css?v=658d757c"rel=stylesheet><script src="../../../_static/documentation_options.js?v=00dd7c45"></script><script src="../../../_static/doctools.js?v=9a2dae69"></script><script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script><script src=../../../_static/bizstyle.js></script><link href=https://thomasweise.github.io/latexgit_py/_modules/latexgit/repository/processed.html rel=canonical><link href=../../../genindex.html rel=index title=Index><link href=../../../search.html rel=search title=Search><meta content="width=device-width,initial-scale=1.0"name=viewport><body><div aria-label=Related class=related role=navigation><h3>Navigation</h3><ul><li class=right style=margin-right:10px><a title="General Index"accesskey=I href=../../../genindex.html>index</a><li class=right><a title="Python Module Index"href=../../../py-modindex.html>modules</a> |<li class="nav-item nav-item-0"><a href=../../../index.html>latexgit 0.8.22 documentation</a> »<li class="nav-item nav-item-1"><a accesskey=U href=../../index.html>Module code</a> »<li class="nav-item nav-item-this"><a href>latexgit.repository.processed</a></ul></div><div class=document><div class=documentwrapper><div class=bodywrapper><div class=body role=main><h1>Source code for latexgit.repository.processed</h1><div class=highlight><pre>
+<span></span><span class=sd>"""A post-processed representation of repository files."""</span>
+
+<span class=kn>import</span> <span class=nn>json</span>
+<span class=kn>import</span> <span class=nn>os</span>
+<span class=kn>from</span> <span class=nn>contextlib</span> <span class=kn>import</span> <span class=n>AbstractContextManager</span>
+<span class=kn>from</span> <span class=nn>os.path</span> <span class=kn>import</span> <span class=n>getsize</span>
+<span class=kn>from</span> <span class=nn>shutil</span> <span class=kn>import</span> <span class=n>rmtree</span>
+<span class=kn>from</span> <span class=nn>tempfile</span> <span class=kn>import</span> <span class=n>mkstemp</span>
+<span class=kn>from</span> <span class=nn>typing</span> <span class=kn>import</span> <span class=n>Final</span><span class=p>,</span> <span class=n>Iterable</span>
+
+<span class=kn>from</span> <span class=nn>pycommons.io.console</span> <span class=kn>import</span> <span class=n>logger</span>
+<span class=kn>from</span> <span class=nn>pycommons.io.path</span> <span class=kn>import</span> <span class=n>Path</span><span class=p>,</span> <span class=n>file_path</span><span class=p>,</span> <span class=n>write_lines</span>
+<span class=kn>from</span> <span class=nn>pycommons.net.url</span> <span class=kn>import</span> <span class=n>URL</span>
+<span class=kn>from</span> <span class=nn>pycommons.processes.python</span> <span class=kn>import</span> <span class=n>PYTHON_ENV</span><span class=p>,</span> <span class=n>PYTHON_INTERPRETER</span>
+<span class=kn>from</span> <span class=nn>pycommons.processes.shell</span> <span class=kn>import</span> <span class=n>STREAM_CAPTURE</span><span class=p>,</span> <span class=n>Command</span>
+<span class=kn>from</span> <span class=nn>pycommons.types</span> <span class=kn>import</span> <span class=n>type_error</span>
+
+<span class=kn>from</span> <span class=nn>latexgit.repository.gitmanager</span> <span class=kn>import</span> <span class=n>GitManager</span>
+
+
+<span class=k>def</span> <span class=nf>_str_tuple</span><span class=p>(</span><span class=n>command</span><span class=p>:</span> <span class=kc>None</span> <span class=o>|</span> <span class=nb>str</span> <span class=o>|</span> <span class=n>Iterable</span><span class=p>[</span><span class=nb>str</span><span class=p>],</span>
+               <span class=n>none_ok</span><span class=p>:</span> <span class=nb>bool</span> <span class=o>=</span> <span class=kc>True</span><span class=p>,</span>
+               <span class=n>empty_ok</span><span class=p>:</span> <span class=nb>bool</span> <span class=o>=</span> <span class=kc>True</span><span class=p>,</span>
+               <span class=n>raise_errors</span><span class=p>:</span> <span class=nb>bool</span> <span class=o>=</span> <span class=kc>False</span><span class=p>)</span> <span class=o>-></span> <span class=nb>tuple</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=o>...</span><span class=p>]</span> <span class=o>|</span> <span class=kc>None</span><span class=p>:</span>
+<span class=w>    </span><span class=sd>"""</span>
+<span class=sd>    Get a string tuple from some source.</span>
+
+<span class=sd>    :param command: the original command</span>
+<span class=sd>    :param none_ok: is `None` OK (and should lead to an empty tuple returned)?</span>
+<span class=sd>    :param empty_ok: is it OK if an empty tuple is returned?</span>
+<span class=sd>    :param raise_errors: should we raise errors or just return `None`?</span>
+<span class=sd>    :return: the tuple</span>
+<span class=sd>    """</span>
+    <span class=k>if</span> <span class=n>command</span> <span class=ow>is</span> <span class=kc>None</span><span class=p>:</span>
+        <span class=k>if</span> <span class=p>(</span><span class=ow>not</span> <span class=n>raise_errors</span><span class=p>)</span> <span class=ow>or</span> <span class=p>(</span><span class=n>none_ok</span> <span class=ow>and</span> <span class=n>empty_ok</span><span class=p>):</span>
+            <span class=k>return</span> <span class=p>()</span>
+        <span class=k>if</span> <span class=n>none_ok</span><span class=p>:</span>
+            <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span>
+                <span class=sa>f</span><span class=s2>"Empty command not permitted, but got </span><span class=si>{</span><span class=n>command</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+        <span class=k>if</span> <span class=n>empty_ok</span><span class=p>:</span>
+            <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=s2>"None is not OK as command."</span><span class=p>)</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span>
+            <span class=sa>f</span><span class=s2>"Neither None nor empty commands are OK, but got </span><span class=si>{</span><span class=n>command</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+
+    <span class=n>res</span><span class=p>:</span> <span class=nb>list</span><span class=p>[</span><span class=nb>str</span><span class=p>]</span> <span class=o>=</span> <span class=p>[]</span>
+    <span class=k>if</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>command</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+        <span class=n>command</span> <span class=o>=</span> <span class=p>[</span><span class=n>command</span><span class=p>]</span>
+    <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>command</span><span class=p>,</span> <span class=n>Iterable</span><span class=p>):</span>
+        <span class=k>if</span> <span class=n>raise_errors</span><span class=p>:</span>
+            <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>command</span><span class=p>,</span> <span class=s2>"command"</span><span class=p>,</span> <span class=n>Iterable</span><span class=p>)</span>
+        <span class=k>return</span> <span class=kc>None</span>
+    <span class=k>for</span> <span class=n>i</span><span class=p>,</span> <span class=n>o</span> <span class=ow>in</span> <span class=nb>enumerate</span><span class=p>(</span><span class=n>command</span><span class=p>):</span>
+        <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>o</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+            <span class=k>if</span> <span class=n>raise_errors</span><span class=p>:</span>
+                <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>o</span><span class=p>,</span> <span class=sa>f</span><span class=s2>"command[</span><span class=si>{</span><span class=n>i</span><span class=si>}</span><span class=s2>]"</span><span class=p>,</span> <span class=nb>str</span><span class=p>)</span>
+            <span class=k>return</span> <span class=kc>None</span>
+        <span class=n>use_o</span> <span class=o>=</span> <span class=nb>str</span><span class=o>.</span><span class=n>strip</span><span class=p>(</span><span class=n>o</span><span class=p>)</span>
+        <span class=k>if</span> <span class=nb>str</span><span class=o>.</span><span class=fm>__len__</span><span class=p>(</span><span class=n>use_o</span><span class=p>)</span> <span class=o>></span> <span class=mi>0</span><span class=p>:</span>
+            <span class=n>res</span><span class=o>.</span><span class=n>append</span><span class=p>(</span><span class=n>use_o</span><span class=p>)</span>
+    <span class=k>if</span> <span class=nb>list</span><span class=o>.</span><span class=fm>__len__</span><span class=p>(</span><span class=n>res</span><span class=p>)</span> <span class=o><=</span> <span class=mi>0</span><span class=p>:</span>
+        <span class=k>if</span> <span class=ow>not</span> <span class=n>empty_ok</span><span class=p>:</span>
+            <span class=k>if</span> <span class=n>raise_errors</span><span class=p>:</span>
+                <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span>
+                    <span class=sa>f</span><span class=s2>"Empty command not OK, but got </span><span class=si>{</span><span class=n>command</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+            <span class=k>return</span> <span class=kc>None</span>
+        <span class=k>return</span> <span class=p>()</span>
+    <span class=k>return</span> <span class=nb>tuple</span><span class=p>(</span><span class=n>res</span><span class=p>)</span>
+
+
+<span class=k>def</span> <span class=nf>_write</span><span class=p>(</span><span class=n>orig</span><span class=p>:</span> <span class=nb>str</span><span class=p>,</span> <span class=n>dest</span><span class=p>:</span> <span class=n>Path</span><span class=p>)</span> <span class=o>-></span> <span class=kc>None</span><span class=p>:</span>
+<span class=w>    </span><span class=sd>"""</span>
+<span class=sd>    Write the string to the destination.</span>
+
+<span class=sd>    :param orig: the original string</span>
+<span class=sd>    :param dest: the destination</span>
+<span class=sd>    """</span>
+    <span class=n>orig</span> <span class=o>=</span> <span class=nb>str</span><span class=o>.</span><span class=n>rstrip</span><span class=p>(</span><span class=n>orig</span><span class=p>)</span>
+    <span class=k>with</span> <span class=n>dest</span><span class=o>.</span><span class=n>open_for_write</span><span class=p>()</span> <span class=k>as</span> <span class=n>output</span><span class=p>:</span>
+        <span class=n>write_lines</span><span class=p>(</span><span class=nb>map</span><span class=p>(</span><span class=nb>str</span><span class=o>.</span><span class=n>rstrip</span><span class=p>,</span> <span class=nb>str</span><span class=o>.</span><span class=n>rstrip</span><span class=p>(</span><span class=n>orig</span><span class=p>)</span><span class=o>.</span><span class=n>splitlines</span><span class=p>()),</span> <span class=n>output</span><span class=p>)</span>
+    <span class=n>logger</span><span class=p>(</span><span class=s2>"Wrote r-stripped string of originally "</span>
+           <span class=sa>f</span><span class=s2>"</span><span class=si>{</span><span class=nb>str</span><span class=o>.</span><span class=fm>__len__</span><span class=p>(</span><span class=n>orig</span><span class=p>)</span><span class=si>}</span><span class=s2> characters to </span><span class=si>{</span><span class=n>dest</span><span class=si>!r}</span><span class=s2>, "</span>
+           <span class=sa>f</span><span class=s2>"produced file of size </span><span class=si>{</span><span class=n>getsize</span><span class=p>(</span><span class=n>dest</span><span class=p>)</span><span class=si>}</span><span class=s2> bytes."</span><span class=p>)</span>
+
+
+<div class=viewcode-block id=Processed>
+<a class=viewcode-back href=../../../latexgit.repository.html#latexgit.repository.processed.Processed>[docs]</a>
+<span class=k>class</span> <span class=nc>Processed</span><span class=p>(</span><span class=n>AbstractContextManager</span><span class=p>):</span>
+<span class=w>    </span><span class=sd>"""A manager for processed files."""</span>
+
+    <span class=k>def</span> <span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>base_dir</span><span class=p>:</span> <span class=nb>str</span><span class=p>)</span> <span class=o>-></span> <span class=kc>None</span><span class=p>:</span>
+<span class=w>        </span><span class=sd>"""</span>
+<span class=sd>        Initialize the post processed manager.</span>
+
+<span class=sd>        :param base_dir: the base directory</span>
+<span class=sd>        """</span>
+        <span class=c1>#: is the processor still open?</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__is_open</span><span class=p>:</span> <span class=nb>bool</span> <span class=o>=</span> <span class=kc>True</span>
+
+        <span class=c1>#: the base path of the processor</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>base_path</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>Path</span><span class=p>]</span> <span class=o>=</span> <span class=n>Path</span><span class=p>(</span><span class=n>base_dir</span><span class=p>)</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>base_path</span><span class=o>.</span><span class=n>ensure_dir_exists</span><span class=p>()</span>
+
+        <span class=c1>#: the internal repository manager</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__git</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>GitManager</span><span class=p>]</span> <span class=o>=</span> <span class=n>GitManager</span><span class=p>(</span>
+            <span class=bp>self</span><span class=o>.</span><span class=n>base_path</span><span class=o>.</span><span class=n>resolve_inside</span><span class=p>(</span><span class=s2>"git"</span><span class=p>))</span>
+
+        <span class=c1>#: the directory to store post-processed stuff</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__cache_dir</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>Path</span><span class=p>]</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>base_path</span><span class=o>.</span><span class=n>resolve_inside</span><span class=p>(</span>
+            <span class=s2>".cache"</span><span class=p>)</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__cache_dir</span><span class=o>.</span><span class=n>ensure_dir_exists</span><span class=p>()</span>
+
+        <span class=c1>#: the mapping of post-processing commands and resources</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__cache_mapped</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>dict</span><span class=p>[</span>
+            <span class=nb>tuple</span><span class=p>[</span><span class=n>Path</span><span class=p>,</span> <span class=nb>tuple</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=o>...</span><span class=p>]],</span> <span class=n>Path</span><span class=p>]]</span> <span class=o>=</span> <span class=p>{}</span>
+
+        <span class=c1>#: the cache file</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__cache_list</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>Path</span><span class=p>]</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>__cache_dir</span><span class=o>.</span><span class=n>resolve_inside</span><span class=p>(</span>
+            <span class=s2>".cache_list.json"</span><span class=p>)</span>
+        <span class=c1>#: load the cache list</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__cache_list</span><span class=o>.</span><span class=n>ensure_file_exists</span><span class=p>()</span>
+
+        <span class=k>if</span> <span class=n>getsize</span><span class=p>(</span><span class=bp>self</span><span class=o>.</span><span class=n>__cache_list</span><span class=p>)</span> <span class=o>></span> <span class=mi>0</span><span class=p>:</span>  <span class=c1># file size > 0</span>
+            <span class=n>s</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>__cache_list</span><span class=o>.</span><span class=n>read_all_str</span><span class=p>()</span>
+            <span class=k>if</span> <span class=nb>len</span><span class=p>(</span><span class=n>s</span><span class=p>)</span> <span class=o>></span> <span class=mi>0</span><span class=p>:</span>  <span class=c1># load all cached mappings</span>
+                <span class=k>for</span> <span class=n>key</span><span class=p>,</span> <span class=n>value</span> <span class=ow>in</span> <span class=n>json</span><span class=o>.</span><span class=n>loads</span><span class=p>(</span><span class=n>s</span><span class=p>):</span>
+                    <span class=n>pt1</span><span class=p>:</span> <span class=n>Path</span> <span class=o>=</span> <span class=n>Path</span><span class=p>(</span><span class=n>key</span><span class=p>[</span><span class=mi>0</span><span class=p>])</span>
+                    <span class=k>if</span> <span class=p>(</span><span class=ow>not</span> <span class=n>pt1</span><span class=o>.</span><span class=n>is_file</span><span class=p>())</span> <span class=ow>or</span> <span class=p>(</span>
+                            <span class=ow>not</span> <span class=bp>self</span><span class=o>.</span><span class=n>__git</span><span class=o>.</span><span class=n>base_dir</span><span class=o>.</span><span class=n>contains</span><span class=p>(</span><span class=n>pt1</span><span class=p>)):</span>
+                        <span class=k>continue</span>
+                    <span class=n>pt2</span><span class=p>:</span> <span class=n>Path</span> <span class=o>=</span> <span class=n>Path</span><span class=p>(</span><span class=n>value</span><span class=p>)</span>
+                    <span class=k>if</span> <span class=p>(</span><span class=ow>not</span> <span class=n>pt2</span><span class=o>.</span><span class=n>is_file</span><span class=p>())</span> <span class=ow>or</span> <span class=p>(</span>
+                            <span class=ow>not</span> <span class=bp>self</span><span class=o>.</span><span class=n>__cache_dir</span><span class=o>.</span><span class=n>contains</span><span class=p>(</span><span class=n>pt2</span><span class=p>)):</span>
+                        <span class=k>continue</span>
+                    <span class=n>cmd1</span><span class=p>:</span> <span class=nb>tuple</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=o>...</span><span class=p>]</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=n>_str_tuple</span><span class=p>(</span>
+                        <span class=n>key</span><span class=p>[</span><span class=mi>1</span><span class=p>],</span> <span class=kc>True</span><span class=p>,</span> <span class=kc>True</span><span class=p>,</span> <span class=kc>False</span><span class=p>)</span>
+                    <span class=k>if</span> <span class=n>cmd1</span> <span class=ow>is</span> <span class=kc>None</span><span class=p>:</span>
+                        <span class=k>continue</span>
+                    <span class=bp>self</span><span class=o>.</span><span class=n>__cache_mapped</span><span class=p>[(</span><span class=n>pt1</span><span class=p>,</span> <span class=n>cmd1</span><span class=p>)]</span> <span class=o>=</span> <span class=n>pt2</span>
+
+        <span class=c1>#: the directory to store generated</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__generated_dir</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>Path</span><span class=p>]</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>base_path</span><span class=o>.</span><span class=n>resolve_inside</span><span class=p>(</span>
+            <span class=s2>".generated"</span><span class=p>)</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__generated_dir</span><span class=o>.</span><span class=n>ensure_dir_exists</span><span class=p>()</span>
+
+        <span class=c1>#: the mapping of command lines and generated resources</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__generated_mapped</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>dict</span><span class=p>[</span><span class=nb>tuple</span><span class=p>[</span>
+            <span class=n>Path</span> <span class=o>|</span> <span class=kc>None</span><span class=p>,</span> <span class=nb>tuple</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=o>...</span><span class=p>]],</span> <span class=n>Path</span><span class=p>]]</span> <span class=o>=</span> <span class=p>{}</span>
+
+        <span class=c1>#: the generated list file</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__generated_list</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>Path</span><span class=p>]</span> <span class=o>=</span> <span class=p>(</span>
+            <span class=bp>self</span><span class=o>.</span><span class=n>__generated_dir</span><span class=o>.</span><span class=n>resolve_inside</span><span class=p>(</span><span class=s2>".generated_list.json"</span><span class=p>))</span>
+        <span class=c1>#: load the generated list</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__generated_list</span><span class=o>.</span><span class=n>ensure_file_exists</span><span class=p>()</span>
+
+        <span class=k>if</span> <span class=n>getsize</span><span class=p>(</span><span class=bp>self</span><span class=o>.</span><span class=n>__generated_list</span><span class=p>)</span> <span class=o>></span> <span class=mi>0</span><span class=p>:</span>  <span class=c1># file size > 0</span>
+            <span class=n>s</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>__generated_list</span><span class=o>.</span><span class=n>read_all_str</span><span class=p>()</span>
+            <span class=k>if</span> <span class=nb>len</span><span class=p>(</span><span class=n>s</span><span class=p>)</span> <span class=o>></span> <span class=mi>0</span><span class=p>:</span>  <span class=c1># load all cached mappings</span>
+                <span class=k>for</span> <span class=n>key</span><span class=p>,</span> <span class=n>value</span> <span class=ow>in</span> <span class=n>json</span><span class=o>.</span><span class=n>loads</span><span class=p>(</span><span class=n>s</span><span class=p>):</span>
+                    <span class=n>pt3</span><span class=p>:</span> <span class=n>Path</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=n>Path</span><span class=p>(</span><span class=n>key</span><span class=p>[</span><span class=mi>0</span><span class=p>])</span> \
+                        <span class=k>if</span> <span class=n>key</span><span class=p>[</span><span class=mi>0</span><span class=p>]</span> <span class=ow>is</span> <span class=ow>not</span> <span class=kc>None</span> <span class=k>else</span> <span class=kc>None</span>
+                    <span class=k>if</span> <span class=ow>not</span> <span class=p>((</span><span class=n>pt3</span> <span class=ow>is</span> <span class=kc>None</span><span class=p>)</span> <span class=ow>or</span> <span class=bp>self</span><span class=o>.</span><span class=n>__git</span><span class=o>.</span><span class=n>is_git_repo_path</span><span class=p>(</span>
+                            <span class=n>pt3</span><span class=p>)):</span>
+                        <span class=k>continue</span>  <span class=c1># purge dirs not assigned to git repos</span>
+                    <span class=n>cmd2</span><span class=p>:</span> <span class=nb>tuple</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=o>...</span><span class=p>]</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=n>_str_tuple</span><span class=p>(</span>
+                        <span class=n>key</span><span class=p>[</span><span class=mi>1</span><span class=p>],</span> <span class=kc>False</span><span class=p>,</span> <span class=kc>False</span><span class=p>,</span> <span class=kc>False</span><span class=p>)</span>
+                    <span class=k>if</span> <span class=n>cmd2</span> <span class=ow>is</span> <span class=kc>None</span><span class=p>:</span>
+                        <span class=k>continue</span>  <span class=c1># purge empty commands</span>
+                    <span class=n>pt4</span><span class=p>:</span> <span class=n>Path</span> <span class=o>=</span> <span class=n>Path</span><span class=p>(</span><span class=n>value</span><span class=p>)</span>
+                    <span class=k>if</span> <span class=p>(</span><span class=ow>not</span> <span class=n>pt4</span><span class=o>.</span><span class=n>is_file</span><span class=p>())</span> <span class=ow>or</span> <span class=p>(</span>
+                            <span class=ow>not</span> <span class=bp>self</span><span class=o>.</span><span class=n>__generated_dir</span><span class=o>.</span><span class=n>contains</span><span class=p>(</span><span class=n>pt4</span><span class=p>)):</span>
+                        <span class=k>continue</span>  <span class=c1># purge invalid cache entries</span>
+                    <span class=bp>self</span><span class=o>.</span><span class=n>__generated_mapped</span><span class=p>[(</span><span class=n>pt3</span><span class=p>,</span> <span class=n>cmd2</span><span class=p>)]</span> <span class=o>=</span> <span class=n>pt4</span>
+
+<div class=viewcode-block id=Processed.get_file_and_url>
+<a class=viewcode-back href=../../../latexgit.repository.html#latexgit.repository.processed.Processed.get_file_and_url>[docs]</a>
+    <span class=k>def</span> <span class=nf>get_file_and_url</span><span class=p>(</span>
+            <span class=bp>self</span><span class=p>,</span> <span class=n>repo_url</span><span class=p>:</span> <span class=nb>str</span><span class=p>,</span> <span class=n>relative_path</span><span class=p>:</span> <span class=nb>str</span><span class=p>,</span>
+            <span class=n>processor</span><span class=p>:</span> <span class=n>Iterable</span><span class=p>[</span><span class=nb>str</span><span class=p>]</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=p>())</span> <span class=o>-></span> <span class=nb>tuple</span><span class=p>[</span><span class=n>Path</span><span class=p>,</span> <span class=n>URL</span><span class=p>]:</span>
+<span class=w>        </span><span class=sd>"""</span>
+<span class=sd>        Get a specified, potentially pre-processed file.</span>
+
+<span class=sd>        :param repo_url: the repository url</span>
+<span class=sd>        :param relative_path: the relative path of the file</span>
+<span class=sd>        :param processor: the pre-processor commands</span>
+<span class=sd>        :return: the file and the url into the git repository of the original</span>
+<span class=sd>        """</span>
+        <span class=k>if</span> <span class=ow>not</span> <span class=bp>self</span><span class=o>.</span><span class=n>__is_open</span><span class=p>:</span>
+            <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=s2>"already closed!"</span><span class=p>)</span>
+        <span class=k>if</span> <span class=n>processor</span> <span class=ow>is</span> <span class=kc>None</span><span class=p>:</span>
+            <span class=n>processor</span> <span class=o>=</span> <span class=p>()</span>
+        <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>processor</span><span class=p>,</span> <span class=n>Iterable</span><span class=p>):</span>
+            <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>processor</span><span class=p>,</span> <span class=s2>"preprocessor"</span><span class=p>,</span> <span class=n>Iterable</span><span class=p>)</span>
+        <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>repo_url</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+            <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>repo_url</span><span class=p>,</span> <span class=s2>"repo_url"</span><span class=p>,</span> <span class=nb>str</span><span class=p>)</span>
+        <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>relative_path</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+            <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>relative_path</span><span class=p>,</span> <span class=s2>"relative_path"</span><span class=p>,</span> <span class=nb>str</span><span class=p>)</span>
+
+        <span class=c1># first step: get source repository file</span>
+        <span class=n>ps</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>tuple</span><span class=p>[</span><span class=n>Path</span><span class=p>,</span> <span class=n>URL</span><span class=p>]]</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>__git</span><span class=o>.</span><span class=n>get_file_and_url</span><span class=p>(</span>
+            <span class=n>repo_url</span><span class=p>,</span> <span class=n>relative_path</span><span class=p>)</span>
+        <span class=n>path</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>Path</span><span class=p>]</span> <span class=o>=</span> <span class=n>ps</span><span class=p>[</span><span class=mi>0</span><span class=p>]</span>
+
+        <span class=c1># second step: prepare postprocessing command</span>
+        <span class=n>command</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>tuple</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=o>...</span><span class=p>]]</span> <span class=o>=</span> <span class=n>_str_tuple</span><span class=p>(</span>
+            <span class=n>processor</span><span class=p>,</span> <span class=kc>True</span><span class=p>,</span> <span class=kc>True</span><span class=p>,</span> <span class=kc>True</span><span class=p>)</span>
+        <span class=k>if</span> <span class=nb>len</span><span class=p>(</span><span class=n>command</span><span class=p>)</span> <span class=o><=</span> <span class=mi>0</span><span class=p>:</span>  <span class=c1># no postprocessing command?</span>
+            <span class=k>return</span> <span class=n>path</span><span class=p>,</span> <span class=n>ps</span><span class=p>[</span><span class=mi>1</span><span class=p>]</span>  <span class=c1># then return path to git file directory</span>
+
+        <span class=c1># so there is postprocessing to do: look up in cache</span>
+        <span class=n>key</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>tuple</span><span class=p>[</span><span class=n>Path</span><span class=p>,</span> <span class=nb>tuple</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=o>...</span><span class=p>]]]</span> <span class=o>=</span> <span class=p>(</span><span class=n>path</span><span class=p>,</span> <span class=n>command</span><span class=p>)</span>
+        <span class=n>log_str</span><span class=p>:</span> <span class=nb>str</span> <span class=o>=</span> <span class=sa>f</span><span class=s2>"</span><span class=si>{</span><span class=n>path</span><span class=si>!r}</span><span class=s2> via </span><span class=si>{</span><span class=s1>' '</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=nb>repr</span><span class=p>(</span><span class=n>c</span><span class=p>)</span><span class=w> </span><span class=k>for</span><span class=w> </span><span class=n>c</span><span class=w> </span><span class=ow>in</span><span class=w> </span><span class=n>command</span><span class=p>)</span><span class=si>}</span><span class=s2>"</span>
+        <span class=k>if</span> <span class=n>key</span> <span class=ow>in</span> <span class=bp>self</span><span class=o>.</span><span class=n>__cache_mapped</span><span class=p>:</span>  <span class=c1># found in cache?</span>
+            <span class=n>pt</span><span class=p>:</span> <span class=n>Path</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>__cache_mapped</span><span class=p>[</span><span class=n>key</span><span class=p>]</span>
+            <span class=k>if</span> <span class=n>pt</span><span class=o>.</span><span class=n>is_file</span><span class=p>():</span>
+                <span class=n>logger</span><span class=p>(</span><span class=sa>f</span><span class=s2>"found cache entry </span><span class=si>{</span><span class=n>pt</span><span class=si>!r}</span><span class=s2> for </span><span class=si>{</span><span class=n>log_str</span><span class=si>}</span><span class=s2>."</span><span class=p>)</span>
+                <span class=k>return</span> <span class=n>pt</span><span class=p>,</span> <span class=n>ps</span><span class=p>[</span><span class=mi>1</span><span class=p>]</span>  <span class=c1># return path to cached file</span>
+
+        <span class=c1># not in cache: create new file and apply post-processing</span>
+        <span class=p>(</span><span class=n>handle</span><span class=p>,</span> <span class=n>fpath</span><span class=p>)</span> <span class=o>=</span> <span class=n>mkstemp</span><span class=p>(</span><span class=n>prefix</span><span class=o>=</span><span class=s2>"proc_"</span><span class=p>,</span> <span class=nb>dir</span><span class=o>=</span><span class=bp>self</span><span class=o>.</span><span class=n>__cache_dir</span><span class=p>)</span>
+        <span class=n>os</span><span class=o>.</span><span class=n>close</span><span class=p>(</span><span class=n>handle</span><span class=p>)</span>
+        <span class=n>dest</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>Path</span><span class=p>]</span> <span class=o>=</span> <span class=n>file_path</span><span class=p>(</span><span class=n>fpath</span><span class=p>)</span>
+        <span class=n>log_str</span> <span class=o>=</span> <span class=sa>f</span><span class=s2>"from </span><span class=si>{</span><span class=n>log_str</span><span class=si>}</span><span class=s2> to </span><span class=si>{</span><span class=n>dest</span><span class=si>!r}</span><span class=s2>"</span>
+        <span class=n>logger</span><span class=p>(</span><span class=sa>f</span><span class=s2>"will pipe data from </span><span class=si>{</span><span class=n>path</span><span class=si>!r}</span><span class=s2> via </span><span class=si>{</span><span class=n>log_str</span><span class=si>}</span><span class=s2>"</span><span class=p>)</span>
+
+        <span class=c1># execute the command</span>
+        <span class=n>_write</span><span class=p>(</span><span class=n>Command</span><span class=p>(</span>
+            <span class=n>command</span><span class=o>=</span><span class=n>command</span><span class=p>,</span> <span class=n>working_dir</span><span class=o>=</span><span class=bp>self</span><span class=o>.</span><span class=n>__cache_dir</span><span class=p>,</span>
+            <span class=n>stdout</span><span class=o>=</span><span class=n>STREAM_CAPTURE</span><span class=p>,</span> <span class=n>stdin</span><span class=o>=</span><span class=n>path</span><span class=o>.</span><span class=n>read_all_str</span><span class=p>())</span><span class=o>.</span><span class=n>execute</span><span class=p>(</span>
+            <span class=kc>True</span><span class=p>)[</span><span class=mi>0</span><span class=p>],</span> <span class=n>dest</span><span class=p>)</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__cache_mapped</span><span class=p>[</span><span class=n>key</span><span class=p>]</span> <span class=o>=</span> <span class=n>dest</span>  <span class=c1># remember in cache</span>
+        <span class=k>return</span> <span class=n>dest</span><span class=p>,</span> <span class=n>ps</span><span class=p>[</span><span class=mi>1</span><span class=p>]</span>  <span class=c1># return path</span></div>
+
+
+<div class=viewcode-block id=Processed.get_output>
+<a class=viewcode-back href=../../../latexgit.repository.html#latexgit.repository.processed.Processed.get_output>[docs]</a>
+    <span class=k>def</span> <span class=nf>get_output</span><span class=p>(</span>
+            <span class=bp>self</span><span class=p>,</span> <span class=n>command</span><span class=p>:</span> <span class=nb>str</span> <span class=o>|</span> <span class=n>Iterable</span><span class=p>[</span><span class=nb>str</span><span class=p>],</span>
+            <span class=n>repo_url</span><span class=p>:</span> <span class=nb>str</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=kc>None</span><span class=p>,</span>
+            <span class=n>relative_dir</span><span class=p>:</span> <span class=nb>str</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=kc>None</span><span class=p>)</span> <span class=o>-></span> <span class=nb>tuple</span><span class=p>[</span><span class=n>Path</span><span class=p>,</span> <span class=n>URL</span> <span class=o>|</span> <span class=kc>None</span><span class=p>]:</span>
+<span class=w>        </span><span class=sd>"""</span>
+<span class=sd>        Get the output of a certain command.</span>
+
+<span class=sd>        :param command: the command itself</span>
+<span class=sd>        :param repo_url: the optional repository URL</span>
+<span class=sd>        :param relative_dir: the optional directory inside the repository</span>
+<span class=sd>            where the command should be executed</span>
+<span class=sd>        :return: the path to the output and the url of the git repository,</span>
+<span class=sd>            if any</span>
+<span class=sd>        """</span>
+        <span class=k>if</span> <span class=ow>not</span> <span class=bp>self</span><span class=o>.</span><span class=n>__is_open</span><span class=p>:</span>
+            <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=s2>"already closed!"</span><span class=p>)</span>
+        <span class=n>command</span> <span class=o>=</span> <span class=n>_str_tuple</span><span class=p>(</span><span class=n>command</span><span class=p>,</span> <span class=kc>False</span><span class=p>,</span> <span class=kc>False</span><span class=p>,</span> <span class=kc>True</span><span class=p>)</span>
+        <span class=k>if</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>repo_url</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+            <span class=k>if</span> <span class=nb>str</span><span class=o>.</span><span class=fm>__len__</span><span class=p>(</span><span class=n>repo_url</span><span class=p>)</span> <span class=o><=</span> <span class=mi>0</span><span class=p>:</span>
+                <span class=n>repo_url</span> <span class=o>=</span> <span class=kc>None</span>
+        <span class=k>elif</span> <span class=n>repo_url</span> <span class=ow>is</span> <span class=ow>not</span> <span class=kc>None</span><span class=p>:</span>
+            <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>repo_url</span><span class=p>,</span> <span class=s2>"repo_url"</span><span class=p>,</span> <span class=p>(</span><span class=nb>str</span><span class=p>,</span> <span class=kc>None</span><span class=p>))</span>
+        <span class=k>if</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>relative_dir</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+            <span class=k>if</span> <span class=nb>str</span><span class=o>.</span><span class=fm>__len__</span><span class=p>(</span><span class=n>relative_dir</span><span class=p>)</span> <span class=o><=</span> <span class=mi>0</span><span class=p>:</span>
+                <span class=n>relative_dir</span> <span class=o>=</span> <span class=kc>None</span>
+        <span class=k>elif</span> <span class=n>relative_dir</span> <span class=ow>is</span> <span class=ow>not</span> <span class=kc>None</span><span class=p>:</span>
+            <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>relative_dir</span><span class=p>,</span> <span class=s2>"relative_dir"</span><span class=p>,</span> <span class=p>(</span><span class=nb>str</span><span class=p>,</span> <span class=kc>None</span><span class=p>))</span>
+        <span class=k>if</span> <span class=p>(</span><span class=n>repo_url</span> <span class=ow>is</span> <span class=kc>None</span><span class=p>)</span> <span class=o>!=</span> <span class=p>(</span><span class=n>relative_dir</span> <span class=ow>is</span> <span class=kc>None</span><span class=p>):</span>
+            <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"repo_url and relative_dir must either both be "</span>
+                             <span class=sa>f</span><span class=s2>"None or neither, but they are </span><span class=si>{</span><span class=n>repo_url</span><span class=si>!r}</span><span class=s2> "</span>
+                             <span class=sa>f</span><span class=s2>"and </span><span class=si>{</span><span class=n>relative_dir</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+
+        <span class=n>path</span><span class=p>:</span> <span class=n>Path</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=kc>None</span>
+        <span class=n>url</span><span class=p>:</span> <span class=n>URL</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=kc>None</span>
+        <span class=k>if</span> <span class=n>repo_url</span> <span class=ow>is</span> <span class=ow>not</span> <span class=kc>None</span><span class=p>:</span>
+            <span class=n>repo</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>__git</span><span class=o>.</span><span class=n>get_repo</span><span class=p>(</span><span class=n>repo_url</span><span class=p>)</span>
+            <span class=n>path</span> <span class=o>=</span> <span class=n>repo</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>resolve_inside</span><span class=p>(</span><span class=n>relative_dir</span><span class=p>)</span>
+            <span class=n>url</span> <span class=o>=</span> <span class=n>repo</span><span class=o>.</span><span class=n>url</span>
+
+        <span class=n>key</span><span class=p>:</span> <span class=nb>tuple</span><span class=p>[</span><span class=n>Path</span> <span class=o>|</span> <span class=kc>None</span><span class=p>,</span> <span class=nb>tuple</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=o>...</span><span class=p>]]</span> <span class=o>=</span> <span class=p>(</span><span class=n>path</span><span class=p>,</span> <span class=n>command</span><span class=p>)</span>
+        <span class=n>log_str</span><span class=p>:</span> <span class=nb>str</span> <span class=o>=</span> <span class=sa>f</span><span class=s2>"</span><span class=si>{</span><span class=s1>' '</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=nb>repr</span><span class=p>(</span><span class=n>c</span><span class=p>)</span><span class=w> </span><span class=k>for</span><span class=w> </span><span class=n>c</span><span class=w> </span><span class=ow>in</span><span class=w> </span><span class=n>command</span><span class=p>)</span><span class=si>}</span><span class=s2> in </span><span class=si>{</span><span class=n>path</span><span class=si>!r}</span><span class=s2>"</span>
+
+        <span class=k>if</span> <span class=n>key</span> <span class=ow>in</span> <span class=bp>self</span><span class=o>.</span><span class=n>__generated_mapped</span><span class=p>:</span>
+            <span class=n>result</span><span class=p>:</span> <span class=n>Path</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>__generated_mapped</span><span class=p>[</span><span class=n>key</span><span class=p>]</span>
+            <span class=k>if</span> <span class=n>result</span><span class=o>.</span><span class=n>is_file</span><span class=p>():</span>
+                <span class=n>logger</span><span class=p>(</span><span class=sa>f</span><span class=s2>"found cache entry </span><span class=si>{</span><span class=n>result</span><span class=si>!r}</span><span class=s2> for </span><span class=si>{</span><span class=n>log_str</span><span class=si>}</span><span class=s2>."</span><span class=p>)</span>
+                <span class=k>return</span> <span class=n>result</span><span class=p>,</span> <span class=n>url</span>  <span class=c1># return path to cached file</span>
+
+        <span class=p>(</span><span class=n>handle</span><span class=p>,</span> <span class=n>fpath</span><span class=p>)</span> <span class=o>=</span> <span class=n>mkstemp</span><span class=p>(</span><span class=n>prefix</span><span class=o>=</span><span class=s2>"gen_"</span><span class=p>,</span> <span class=nb>dir</span><span class=o>=</span><span class=bp>self</span><span class=o>.</span><span class=n>__generated_dir</span><span class=p>)</span>
+        <span class=n>os</span><span class=o>.</span><span class=n>close</span><span class=p>(</span><span class=n>handle</span><span class=p>)</span>
+        <span class=n>dest</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>Path</span><span class=p>]</span> <span class=o>=</span> <span class=n>file_path</span><span class=p>(</span><span class=n>fpath</span><span class=p>)</span>
+        <span class=n>log_str</span> <span class=o>=</span> <span class=sa>f</span><span class=s2>"from </span><span class=si>{</span><span class=n>log_str</span><span class=si>}</span><span class=s2> to </span><span class=si>{</span><span class=n>dest</span><span class=si>!r}</span><span class=s2>"</span>
+        <span class=n>logger</span><span class=p>(</span><span class=sa>f</span><span class=s2>"will pipe data from </span><span class=si>{</span><span class=n>path</span><span class=si>!r}</span><span class=s2> via </span><span class=si>{</span><span class=n>log_str</span><span class=si>}</span><span class=s2>"</span><span class=p>)</span>
+
+        <span class=c1># Now we need to fix the command if we are running inside a virtual</span>
+        <span class=c1># environment. If we are running inside a virtual environment, it is</span>
+        <span class=c1># necessary to use the same Python interpreter that was used to run</span>
+        <span class=c1># latexgit. We should also pass along all the Python-related</span>
+        <span class=c1># environment parameters.</span>
+        <span class=n>use_cmd</span><span class=p>:</span> <span class=nb>str</span> <span class=o>|</span> <span class=nb>tuple</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=o>...</span><span class=p>]</span> <span class=o>=</span> <span class=n>command</span>
+        <span class=k>if</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>use_cmd</span><span class=p>,</span> <span class=nb>tuple</span><span class=p>)</span> <span class=ow>and</span> <span class=p>(</span><span class=nb>tuple</span><span class=o>.</span><span class=fm>__len__</span><span class=p>(</span><span class=n>use_cmd</span><span class=p>)</span> <span class=o>></span> <span class=mi>1</span><span class=p>)</span> <span class=ow>and</span> <span class=p>(</span>
+                <span class=nb>str</span><span class=o>.</span><span class=n>lower</span><span class=p>(</span><span class=n>use_cmd</span><span class=p>[</span><span class=mi>0</span><span class=p>])</span><span class=o>.</span><span class=n>startswith</span><span class=p>(</span><span class=s2>"python3"</span><span class=p>)):</span>
+            <span class=n>lcmd</span><span class=p>:</span> <span class=nb>list</span><span class=p>[</span><span class=nb>str</span><span class=p>]</span> <span class=o>=</span> <span class=nb>list</span><span class=p>(</span><span class=n>use_cmd</span><span class=p>)</span>
+            <span class=n>lcmd</span><span class=p>[</span><span class=mi>0</span><span class=p>]</span> <span class=o>=</span> <span class=n>PYTHON_INTERPRETER</span>
+            <span class=n>use_cmd</span> <span class=o>=</span> <span class=nb>tuple</span><span class=p>(</span><span class=n>lcmd</span><span class=p>)</span>
+
+        <span class=c1># execute the command</span>
+        <span class=n>_write</span><span class=p>(</span><span class=n>Command</span><span class=p>(</span><span class=n>command</span><span class=o>=</span><span class=n>use_cmd</span><span class=p>,</span> <span class=n>working_dir</span><span class=o>=</span><span class=n>path</span><span class=p>,</span> <span class=n>env</span><span class=o>=</span><span class=n>PYTHON_ENV</span><span class=p>,</span>
+                       <span class=n>stdout</span><span class=o>=</span><span class=n>STREAM_CAPTURE</span><span class=p>)</span><span class=o>.</span><span class=n>execute</span><span class=p>(</span><span class=kc>True</span><span class=p>)[</span><span class=mi>0</span><span class=p>],</span> <span class=n>dest</span><span class=p>)</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__generated_mapped</span><span class=p>[</span><span class=n>key</span><span class=p>]</span> <span class=o>=</span> <span class=n>dest</span>
+        <span class=k>return</span> <span class=n>dest</span><span class=p>,</span> <span class=n>url</span></div>
+
+
+<div class=viewcode-block id=Processed.close>
+<a class=viewcode-back href=../../../latexgit.repository.html#latexgit.repository.processed.Processed.close>[docs]</a>
+    <span class=k>def</span> <span class=nf>close</span><span class=p>(</span><span class=bp>self</span><span class=p>)</span> <span class=o>-></span> <span class=kc>None</span><span class=p>:</span>
+<span class=w>        </span><span class=sd>"""Close the processed repository and write cache list."""</span>
+        <span class=n>opn</span><span class=p>:</span> <span class=nb>bool</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>__is_open</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>__is_open</span> <span class=o>=</span> <span class=kc>False</span>
+        <span class=k>if</span> <span class=n>opn</span><span class=p>:</span>  <span class=c1># only if we were open...</span>
+            <span class=c1># flush or clear directory of cached post-processed files</span>
+            <span class=k>if</span> <span class=nb>len</span><span class=p>(</span><span class=bp>self</span><span class=o>.</span><span class=n>__cache_mapped</span><span class=p>)</span> <span class=o>></span> <span class=mi>0</span><span class=p>:</span>  <span class=c1># we got cached files</span>
+                <span class=bp>self</span><span class=o>.</span><span class=n>__cache_list</span><span class=o>.</span><span class=n>write_all_str</span><span class=p>(</span><span class=n>json</span><span class=o>.</span><span class=n>dumps</span><span class=p>(</span>  <span class=c1># store cache</span>
+                    <span class=nb>list</span><span class=p>(</span><span class=bp>self</span><span class=o>.</span><span class=n>__cache_mapped</span><span class=o>.</span><span class=n>items</span><span class=p>())))</span>
+            <span class=k>else</span><span class=p>:</span>  <span class=c1># no cache files? we can delete cache directory</span>
+                <span class=n>rmtree</span><span class=p>(</span><span class=bp>self</span><span class=o>.</span><span class=n>__cache_dir</span><span class=p>,</span> <span class=n>ignore_errors</span><span class=o>=</span><span class=kc>True</span><span class=p>)</span>
+
+            <span class=c1># flush or clear directory of generated resources</span>
+            <span class=k>if</span> <span class=nb>len</span><span class=p>(</span><span class=bp>self</span><span class=o>.</span><span class=n>__generated_mapped</span><span class=p>)</span> <span class=o>></span> <span class=mi>0</span><span class=p>:</span>  <span class=c1># we got generated files</span>
+                <span class=bp>self</span><span class=o>.</span><span class=n>__generated_list</span><span class=o>.</span><span class=n>write_all_str</span><span class=p>(</span><span class=n>json</span><span class=o>.</span><span class=n>dumps</span><span class=p>(</span>  <span class=c1># store cache</span>
+                    <span class=nb>list</span><span class=p>(</span><span class=bp>self</span><span class=o>.</span><span class=n>__generated_mapped</span><span class=o>.</span><span class=n>items</span><span class=p>())))</span>
+            <span class=k>else</span><span class=p>:</span>  <span class=c1># no cache files? we can delete cache directory</span>
+                <span class=n>rmtree</span><span class=p>(</span><span class=bp>self</span><span class=o>.</span><span class=n>__generated_dir</span><span class=p>,</span> <span class=n>ignore_errors</span><span class=o>=</span><span class=kc>True</span><span class=p>)</span></div>
+
+
+    <span class=k>def</span> <span class=fm>__exit__</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>exception_type</span><span class=p>,</span> <span class=n>_</span><span class=p>,</span> <span class=n>__</span><span class=p>)</span> <span class=o>-></span> <span class=nb>bool</span><span class=p>:</span>
+<span class=w>        </span><span class=sd>"""</span>
+<span class=sd>        Close the context manager.</span>
+
+<span class=sd>        :param exception_type: ignored</span>
+<span class=sd>        :param _: ignored</span>
+<span class=sd>        :param __: ignored</span>
+<span class=sd>        :returns: `True` to suppress an exception, `False` to rethrow it</span>
+<span class=sd>        """</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>close</span><span class=p>()</span>  <span class=c1># close the manager and flush cache</span>
+        <span class=k>return</span> <span class=n>exception_type</span> <span class=ow>is</span> <span class=kc>None</span></div>
+
+</pre></div><div class=clearer></div></div></div></div><div aria-label=Main class=sphinxsidebar role=navigation><div class=sphinxsidebarwrapper><search id=searchbox role=search style=display:none> <h3 id=searchlabel>Quick search</h3> <div class=searchformwrapper><form action=../../../search.html class=search><input aria-labelledby=searchlabel autocapitalize=off autocomplete=off autocorrect=off name=q spellcheck=false><input type=submit value=Go></form></div> </search><script>document.getElementById(`searchbox`).style.display=`block`</script></div></div><div class=clearer></div></div><div aria-label=Related class=related role=navigation><h3>Navigation</h3><ul><li class=right style=margin-right:10px><a title="General Index"href=../../../genindex.html>index</a><li class=right><a title="Python Module Index"href=../../../py-modindex.html>modules</a> |<li class="nav-item nav-item-0"><a href=../../../index.html>latexgit 0.8.22 documentation</a> »<li class="nav-item nav-item-1"><a href=../../index.html>Module code</a> »<li class="nav-item nav-item-this"><a href>latexgit.repository.processed</a></ul></div><div class=footer role=contentinfo>© Copyright 2023-2024, Thomas Weise.</div>

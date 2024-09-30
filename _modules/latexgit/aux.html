@@ -1,0 +1,349 @@
+<!doctype html><html data-content_root=../../ lang=en><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0"name=viewport><title>latexgit.aux — latexgit 0.8.22 documentation</title><link href="../../_static/pygments.css?v=80d5e7a1"rel=stylesheet><link href="../../_static/bizstyle.css?v=658d757c"rel=stylesheet><script src="../../_static/documentation_options.js?v=00dd7c45"></script><script src="../../_static/doctools.js?v=9a2dae69"></script><script src="../../_static/sphinx_highlight.js?v=dc90522c"></script><script src=../../_static/bizstyle.js></script><link href=https://thomasweise.github.io/latexgit_py/_modules/latexgit/aux.html rel=canonical><link href=../../genindex.html rel=index title=Index><link href=../../search.html rel=search title=Search><meta content="width=device-width,initial-scale=1.0"name=viewport><body><div aria-label=Related class=related role=navigation><h3>Navigation</h3><ul><li class=right style=margin-right:10px><a title="General Index"accesskey=I href=../../genindex.html>index</a><li class=right><a title="Python Module Index"href=../../py-modindex.html>modules</a> |<li class="nav-item nav-item-0"><a href=../../index.html>latexgit 0.8.22 documentation</a> »<li class="nav-item nav-item-1"><a accesskey=U href=../index.html>Module code</a> »<li class="nav-item nav-item-this"><a href>latexgit.aux</a></ul></div><div class=document><div class=documentwrapper><div class=bodywrapper><div class=body role=main><h1>Source code for latexgit.aux</h1><div class=highlight><pre>
+<span></span><span class=sd>"""Process a LaTeX aux file."""</span>
+<span class=kn>import</span> <span class=nn>argparse</span>
+<span class=kn>from</span> <span class=nn>os.path</span> <span class=kn>import</span> <span class=n>dirname</span><span class=p>,</span> <span class=n>getsize</span>
+<span class=kn>from</span> <span class=nn>typing</span> <span class=kn>import</span> <span class=n>Final</span>
+
+<span class=kn>from</span> <span class=nn>pycommons.io.arguments</span> <span class=kn>import</span> <span class=n>make_argparser</span><span class=p>,</span> <span class=n>make_epilog</span>
+<span class=kn>from</span> <span class=nn>pycommons.io.console</span> <span class=kn>import</span> <span class=n>logger</span>
+<span class=kn>from</span> <span class=nn>pycommons.io.path</span> <span class=kn>import</span> <span class=n>Path</span><span class=p>,</span> <span class=n>directory_path</span><span class=p>,</span> <span class=n>write_lines</span>
+<span class=kn>from</span> <span class=nn>pycommons.net.url</span> <span class=kn>import</span> <span class=n>URL</span>
+<span class=kn>from</span> <span class=nn>pycommons.types</span> <span class=kn>import</span> <span class=n>type_error</span>
+
+<span class=kn>from</span> <span class=nn>latexgit.repository.processed</span> <span class=kn>import</span> <span class=n>Processed</span>
+<span class=kn>from</span> <span class=nn>latexgit.version</span> <span class=kn>import</span> <span class=n>__version__</span>
+
+
+<span class=k>def</span> <span class=nf>__int_to_alpha</span><span class=p>(</span><span class=n>index</span><span class=p>:</span> <span class=nb>int</span><span class=p>)</span> <span class=o>-></span> <span class=nb>str</span><span class=p>:</span>
+<span class=w>    </span><span class=sd>"""</span>
+<span class=sd>    Convert an integer to a alphabetic sequence.</span>
+
+<span class=sd>    :param index: the index</span>
+<span class=sd>    :returns: the sequence</span>
+
+<span class=sd>    >>> __int_to_alpha(0)</span>
+<span class=sd>    'a'</span>
+<span class=sd>    >>> __int_to_alpha(1)</span>
+<span class=sd>    'b'</span>
+<span class=sd>    >>> __int_to_alpha(25)</span>
+<span class=sd>    'z'</span>
+<span class=sd>    >>> __int_to_alpha(26)</span>
+<span class=sd>    'aa'</span>
+<span class=sd>    >>> __int_to_alpha(27)</span>
+<span class=sd>    'ab'</span>
+<span class=sd>    >>> __int_to_alpha(51)</span>
+<span class=sd>    'az'</span>
+<span class=sd>    >>> __int_to_alpha(52)</span>
+<span class=sd>    'ba'</span>
+<span class=sd>    >>> __int_to_alpha(26 * 27 - 1)</span>
+<span class=sd>    'zz'</span>
+<span class=sd>    >>> __int_to_alpha(26 * 27)</span>
+<span class=sd>    'aaa'</span>
+<span class=sd>    >>> __int_to_alpha(26 * 27 + 1)</span>
+<span class=sd>    'aab'</span>
+<span class=sd>    >>> __int_to_alpha(26 * 27 + 25)</span>
+<span class=sd>    'aaz'</span>
+<span class=sd>    >>> __int_to_alpha(26 * 27 + 26)</span>
+<span class=sd>    'aba'</span>
+<span class=sd>    >>> __int_to_alpha(26 * 26 * 27 + 26 - 1)</span>
+<span class=sd>    'zzz'</span>
+<span class=sd>    >>> __int_to_alpha(26 * 26 * 27 + 26)</span>
+<span class=sd>    'aaaa'</span>
+<span class=sd>    >>> __int_to_alpha(26 * 26 * 27 + 26 + 26)</span>
+<span class=sd>    'aaba'</span>
+<span class=sd>    >>> __int_to_alpha(26 * 26 * 27 + 26 + 26 * 26)</span>
+<span class=sd>    'abaa'</span>
+<span class=sd>    """</span>
+    <span class=n>chars</span><span class=p>:</span> <span class=nb>list</span><span class=p>[</span><span class=nb>int</span><span class=p>]</span> <span class=o>=</span> <span class=p>[]</span>
+    <span class=k>while</span> <span class=kc>True</span><span class=p>:</span>
+        <span class=n>chars</span><span class=o>.</span><span class=n>append</span><span class=p>(</span><span class=mi>97</span> <span class=o>+</span> <span class=p>(</span><span class=n>index</span> <span class=o>%</span> <span class=mi>26</span><span class=p>))</span>
+        <span class=n>index</span> <span class=o>=</span> <span class=p>(</span><span class=n>index</span> <span class=o>//</span> <span class=mi>26</span><span class=p>)</span> <span class=o>-</span> <span class=mi>1</span>
+        <span class=k>if</span> <span class=n>index</span> <span class=o><</span> <span class=mi>0</span><span class=p>:</span>
+            <span class=k>break</span>
+    <span class=n>chars</span><span class=o>.</span><span class=n>reverse</span><span class=p>()</span>
+    <span class=k>return</span> <span class=s2>""</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=nb>map</span><span class=p>(</span><span class=nb>chr</span><span class=p>,</span> <span class=n>chars</span><span class=p>))</span>
+
+
+<span class=c1>#: the header for git file requests</span>
+<span class=n>REQUEST_FILE</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>str</span><span class=p>]</span> <span class=o>=</span> <span class=sa>r</span><span class=s2>"\@latexgit@gitFile"</span>
+<span class=c1>#: the header for process result requests</span>
+<span class=n>REQUEST_PROCESS</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>str</span><span class=p>]</span> <span class=o>=</span> <span class=sa>r</span><span class=s2>"\@latexgit@process"</span>
+
+
+<span class=k>def</span> <span class=nf>__get_request</span><span class=p>(</span><span class=n>line</span><span class=p>:</span> <span class=nb>str</span><span class=p>)</span> <span class=o>-></span> <span class=nb>tuple</span><span class=p>[</span>
+        <span class=nb>str</span><span class=p>,</span> <span class=nb>str</span> <span class=o>|</span> <span class=kc>None</span><span class=p>,</span> <span class=nb>str</span> <span class=o>|</span> <span class=kc>None</span><span class=p>,</span> <span class=nb>tuple</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=o>...</span><span class=p>]</span> <span class=o>|</span> <span class=kc>None</span><span class=p>]</span> <span class=o>|</span> <span class=kc>None</span><span class=p>:</span>
+<span class=w>    </span><span class=sa>r</span><span class=sd>"""</span>
+<span class=sd>    Get the repository request, if any.</span>
+
+<span class=sd>    :param line: the line</span>
+<span class=sd>    :return: the request, composed of the request function, the repository</span>
+<span class=sd>        (if any), the path (if any), and the optional command; or `None` if</span>
+<span class=sd>        no request was found.</span>
+
+<span class=sd>    >>> print(__get_request(""))</span>
+<span class=sd>    None</span>
+<span class=sd>    >>> print(__get_request(r"\hello"))</span>
+<span class=sd>    None</span>
+<span class=sd>    >>> print(__get_request(r"\@latexgit@gitFile{x}{y}{}"))</span>
+<span class=sd>    ('\\@latexgit@gitFile', 'x', 'y', None)</span>
+<span class=sd>    >>> print(__get_request(r"\@latexgit@process{x}{y}{python3 --version}"))</span>
+<span class=sd>    ('\\@latexgit@process', 'x', 'y', ('python3', '--version'))</span>
+<span class=sd>    >>> print(__get_request(r"\@latexgit@gitFile{x}{y}{a}"))</span>
+<span class=sd>    ('\\@latexgit@gitFile', 'x', 'y', ('a',))</span>
+<span class=sd>    >>> print(__get_request(r"\@latexgit@gitFile{x}{y}{a b}"))</span>
+<span class=sd>    ('\\@latexgit@gitFile', 'x', 'y', ('a', 'b'))</span>
+<span class=sd>    >>> print(__get_request(r"\@latexgit@gitFile{x}{y}{a\ b}"))</span>
+<span class=sd>    ('\\@latexgit@gitFile', 'x', 'y', ('a b',))</span>
+<span class=sd>    >>> print(__get_request(r"\@latexgit@gitFile{x{{y}{y}{a\ b}"))</span>
+<span class=sd>    ('\\@latexgit@gitFile', 'x{y', 'y', ('a b',))</span>
+<span class=sd>    >>> print(__get_request(r"\@latexgit@gitFile{x\{y}{y}{a\ b}"))</span>
+<span class=sd>    ('\\@latexgit@gitFile', 'x{y', 'y', ('a b',))</span>
+<span class=sd>    >>> print(__get_request(r"\@latexgit@gitFile{x\{y}{}}y}{a\ b}"))</span>
+<span class=sd>    ('\\@latexgit@gitFile', 'x{y', '}y', ('a b',))</span>
+<span class=sd>    >>> print(__get_request(r"\@latexgit@gitFile{x\{y}{}}y}{a\ \\b}"))</span>
+<span class=sd>    ('\\@latexgit@gitFile', 'x{y', '}y', ('a \\b',))</span>
+<span class=sd>    >>> print(__get_request(r"\@latexgit@gitFile {x\{y}{}}y}{a\ \\b}"))</span>
+<span class=sd>    ('\\@latexgit@gitFile', 'x{y', '}y', ('a \\b',))</span>
+<span class=sd>    >>> print(__get_request(</span>
+<span class=sd>    ...     r" \@latexgit@gitFile { x\{y}{ }}y }{ a\ \\b } "))</span>
+<span class=sd>    ('\\@latexgit@gitFile', 'x{y', '}y', ('a \\b',))</span>
+<span class=sd>    """</span>
+    <span class=k>if</span> <span class=ow>not</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>line</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+        <span class=k>raise</span> <span class=n>type_error</span><span class=p>(</span><span class=n>line</span><span class=p>,</span> <span class=s2>"line"</span><span class=p>,</span> <span class=nb>str</span><span class=p>)</span>
+    <span class=k>if</span> <span class=nb>str</span><span class=o>.</span><span class=fm>__len__</span><span class=p>(</span><span class=n>line</span><span class=p>)</span> <span class=o>>=</span> <span class=mi>67108864</span><span class=p>:</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"line is </span><span class=si>{</span><span class=nb>len</span><span class=p>(</span><span class=n>line</span><span class=p>)</span><span class=si>}</span><span class=s2> characters long?"</span><span class=p>)</span>
+    <span class=n>line</span> <span class=o>=</span> <span class=nb>str</span><span class=o>.</span><span class=n>strip</span><span class=p>(</span><span class=n>line</span><span class=p>)</span>
+
+    <span class=n>request</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>str</span> <span class=o>|</span> <span class=kc>None</span><span class=p>]</span> <span class=o>=</span> <span class=n>REQUEST_FILE</span> <span class=k>if</span> <span class=nb>str</span><span class=o>.</span><span class=n>startswith</span><span class=p>(</span>
+        <span class=n>line</span><span class=p>,</span> <span class=n>REQUEST_FILE</span><span class=p>)</span> <span class=k>else</span> <span class=p>(</span><span class=n>REQUEST_PROCESS</span> <span class=k>if</span> <span class=nb>str</span><span class=o>.</span><span class=n>startswith</span><span class=p>(</span>
+            <span class=n>line</span><span class=p>,</span> <span class=n>REQUEST_PROCESS</span><span class=p>)</span> <span class=k>else</span> <span class=kc>None</span><span class=p>)</span>
+    <span class=k>if</span> <span class=n>request</span> <span class=ow>is</span> <span class=kc>None</span><span class=p>:</span>
+        <span class=k>return</span> <span class=kc>None</span>
+    <span class=n>line</span> <span class=o>=</span> <span class=n>line</span><span class=p>[</span><span class=nb>str</span><span class=o>.</span><span class=fm>__len__</span><span class=p>(</span><span class=n>request</span><span class=p>):]</span><span class=o>.</span><span class=n>lstrip</span><span class=p>()</span>
+    <span class=k>if</span> <span class=p>(</span><span class=nb>str</span><span class=o>.</span><span class=fm>__len__</span><span class=p>(</span><span class=n>line</span><span class=p>)</span> <span class=o><=</span> <span class=mi>0</span><span class=p>)</span> <span class=ow>or</span> <span class=p>(</span><span class=n>line</span><span class=p>[</span><span class=mi>0</span><span class=p>]</span> <span class=o>!=</span> <span class=s2>"{"</span><span class=p>):</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"rest line=</span><span class=si>{</span><span class=n>line</span><span class=si>!r}</span><span class=s2> for </span><span class=si>{</span><span class=n>request</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+
+    <span class=c1># find markers for search-replacing problematic chars</span>
+    <span class=n>strset</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>set</span><span class=p>[</span><span class=nb>str</span><span class=p>]]</span> <span class=o>=</span> <span class=nb>set</span><span class=p>(</span><span class=n>line</span><span class=p>)</span>
+    <span class=k>if</span> <span class=nb>set</span><span class=o>.</span><span class=fm>__len__</span><span class=p>(</span><span class=n>strset</span><span class=p>)</span> <span class=o>></span> <span class=mi>1048576</span><span class=p>:</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span>
+            <span class=sa>f</span><span class=s2>"</span><span class=si>{</span><span class=nb>set</span><span class=o>.</span><span class=fm>__len__</span><span class=p>(</span><span class=n>strset</span><span class=p>)</span><span class=si>}</span><span class=s2> different characters "</span>
+            <span class=sa>f</span><span class=s2>"in line for </span><span class=si>{</span><span class=n>request</span><span class=si>!r}</span><span class=s2>?"</span><span class=p>)</span>
+    <span class=n>markers</span><span class=p>:</span> <span class=nb>list</span><span class=p>[</span><span class=nb>str</span><span class=p>]</span> <span class=o>=</span> <span class=p>[]</span>
+    <span class=n>marker</span><span class=p>:</span> <span class=nb>int</span> <span class=o>=</span> <span class=mi>33</span>
+    <span class=k>while</span> <span class=nb>list</span><span class=o>.</span><span class=fm>__len__</span><span class=p>(</span><span class=n>markers</span><span class=p>)</span> <span class=o><=</span> <span class=mi>4</span><span class=p>:</span>
+        <span class=n>cmarker</span><span class=p>:</span> <span class=nb>str</span> <span class=o>=</span> <span class=nb>chr</span><span class=p>(</span><span class=n>marker</span><span class=p>)</span>
+        <span class=k>if</span> <span class=n>cmarker</span> <span class=ow>in</span> <span class=n>strset</span><span class=p>:</span>
+            <span class=k>continue</span>
+        <span class=n>markers</span><span class=o>.</span><span class=n>append</span><span class=p>(</span><span class=n>cmarker</span><span class=p>)</span>
+        <span class=n>strset</span><span class=o>.</span><span class=n>add</span><span class=p>(</span><span class=n>cmarker</span><span class=p>)</span>
+        <span class=n>marker</span> <span class=o>+=</span> <span class=mi>1</span>
+    <span class=k>del</span> <span class=n>strset</span>
+    <span class=k>del</span> <span class=n>cmarker</span>
+    <span class=k>del</span> <span class=n>marker</span>
+
+    <span class=c1># replace problematic chars with markers</span>
+    <span class=n>line</span> <span class=o>=</span> <span class=p>(</span><span class=n>line</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=s2>"</span><span class=se>\\\\</span><span class=s2>"</span><span class=p>,</span> <span class=n>markers</span><span class=p>[</span><span class=mi>0</span><span class=p>])</span>
+            <span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=sa>r</span><span class=s2>"\{"</span><span class=p>,</span> <span class=n>markers</span><span class=p>[</span><span class=mi>1</span><span class=p>])</span>
+            <span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=s2>"{{"</span><span class=p>,</span> <span class=n>markers</span><span class=p>[</span><span class=mi>1</span><span class=p>])</span>
+            <span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=sa>r</span><span class=s2>"\}"</span><span class=p>,</span> <span class=n>markers</span><span class=p>[</span><span class=mi>2</span><span class=p>])</span>
+            <span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=s2>"}}"</span><span class=p>,</span> <span class=n>markers</span><span class=p>[</span><span class=mi>2</span><span class=p>])</span>
+            <span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=sa>r</span><span class=s2>"\ "</span><span class=p>,</span> <span class=n>markers</span><span class=p>[</span><span class=mi>3</span><span class=p>]))</span>
+
+    <span class=c1># find the split positions, exit if they do not exist</span>
+    <span class=n>idx_1</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>int</span><span class=p>]</span> <span class=o>=</span> <span class=n>line</span><span class=o>.</span><span class=n>find</span><span class=p>(</span><span class=s2>"}"</span><span class=p>,</span> <span class=mi>1</span><span class=p>)</span>
+    <span class=k>if</span> <span class=n>idx_1</span> <span class=o><</span> <span class=mi>1</span><span class=p>:</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"</span><span class=si>{</span><span class=n>request</span><span class=si>!r}</span><span class=s2>/</span><span class=si>{</span><span class=n>line</span><span class=si>!r}</span><span class=s2>: missing 1 </span><span class=se>}}</span><span class=s2>"</span><span class=p>)</span>
+    <span class=n>idx_2</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>int</span><span class=p>]</span> <span class=o>=</span> <span class=n>line</span><span class=o>.</span><span class=n>find</span><span class=p>(</span><span class=s2>"{"</span><span class=p>,</span> <span class=n>idx_1</span><span class=p>)</span>
+    <span class=k>if</span> <span class=n>idx_2</span> <span class=o><=</span> <span class=n>idx_1</span><span class=p>:</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"</span><span class=si>{</span><span class=n>request</span><span class=si>!r}</span><span class=s2>/</span><span class=si>{</span><span class=n>line</span><span class=si>!r}</span><span class=s2>: missing 1 </span><span class=se>{{</span><span class=s2>"</span><span class=p>)</span>
+    <span class=n>idx_3</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>int</span><span class=p>]</span> <span class=o>=</span> <span class=n>line</span><span class=o>.</span><span class=n>find</span><span class=p>(</span><span class=s2>"}"</span><span class=p>,</span> <span class=n>idx_2</span><span class=p>)</span>
+    <span class=k>if</span> <span class=n>idx_3</span> <span class=o><=</span> <span class=n>idx_2</span><span class=p>:</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"</span><span class=si>{</span><span class=n>request</span><span class=si>!r}</span><span class=s2>/</span><span class=si>{</span><span class=n>line</span><span class=si>!r}</span><span class=s2>: missing 2 </span><span class=se>}}</span><span class=s2>"</span><span class=p>)</span>
+    <span class=n>idx_4</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>int</span><span class=p>]</span> <span class=o>=</span> <span class=n>line</span><span class=o>.</span><span class=n>find</span><span class=p>(</span><span class=s2>"{"</span><span class=p>,</span> <span class=n>idx_3</span><span class=p>)</span>
+    <span class=k>if</span> <span class=n>idx_4</span> <span class=o><=</span> <span class=n>idx_3</span><span class=p>:</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"</span><span class=si>{</span><span class=n>request</span><span class=si>!r}</span><span class=s2>/</span><span class=si>{</span><span class=n>line</span><span class=si>!r}</span><span class=s2>: missing 2 </span><span class=se>{{</span><span class=s2>"</span><span class=p>)</span>
+    <span class=n>idx_5</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>int</span><span class=p>]</span> <span class=o>=</span> <span class=n>line</span><span class=o>.</span><span class=n>find</span><span class=p>(</span><span class=s2>"}"</span><span class=p>,</span> <span class=n>idx_4</span><span class=p>)</span>
+    <span class=k>if</span> <span class=n>idx_5</span> <span class=o><=</span> <span class=n>idx_4</span><span class=p>:</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"</span><span class=si>{</span><span class=n>request</span><span class=si>!r}</span><span class=s2>/</span><span class=si>{</span><span class=n>line</span><span class=si>!r}</span><span class=s2>: missing 3 </span><span class=se>}}</span><span class=s2>"</span><span class=p>)</span>
+
+    <span class=c1># extract repository and path information</span>
+    <span class=n>repository</span><span class=p>:</span> <span class=nb>str</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=n>line</span><span class=p>[</span><span class=mi>1</span><span class=p>:</span><span class=n>idx_1</span><span class=p>]</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=n>markers</span><span class=p>[</span><span class=mi>0</span><span class=p>],</span> <span class=s2>"</span><span class=se>\\</span><span class=s2>"</span><span class=p>)</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span>
+        <span class=n>markers</span><span class=p>[</span><span class=mi>1</span><span class=p>],</span> <span class=s2>"{"</span><span class=p>)</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=n>markers</span><span class=p>[</span><span class=mi>2</span><span class=p>],</span> <span class=s2>"}"</span><span class=p>)</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span>
+        <span class=n>markers</span><span class=p>[</span><span class=mi>3</span><span class=p>],</span> <span class=s2>" "</span><span class=p>)</span><span class=o>.</span><span class=n>strip</span><span class=p>()</span>
+    <span class=k>if</span> <span class=nb>str</span><span class=o>.</span><span class=fm>__len__</span><span class=p>(</span><span class=n>repository</span><span class=p>)</span> <span class=o><=</span> <span class=mi>0</span><span class=p>:</span>
+        <span class=k>if</span> <span class=n>request</span> <span class=ow>is</span> <span class=n>REQUEST_FILE</span><span class=p>:</span>
+            <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"repository cannot be empty for </span><span class=si>{</span><span class=n>request</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+        <span class=n>repository</span> <span class=o>=</span> <span class=kc>None</span>
+    <span class=n>path</span><span class=p>:</span> <span class=nb>str</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=n>line</span><span class=p>[</span><span class=n>idx_2</span> <span class=o>+</span> <span class=mi>1</span><span class=p>:</span><span class=n>idx_3</span><span class=p>]</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span>
+        <span class=n>markers</span><span class=p>[</span><span class=mi>0</span><span class=p>],</span> <span class=s2>"</span><span class=se>\\</span><span class=s2>"</span><span class=p>)</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=n>markers</span><span class=p>[</span><span class=mi>1</span><span class=p>],</span> <span class=s2>"{"</span><span class=p>)</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span>
+        <span class=n>markers</span><span class=p>[</span><span class=mi>2</span><span class=p>],</span> <span class=s2>"}"</span><span class=p>)</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=n>markers</span><span class=p>[</span><span class=mi>3</span><span class=p>],</span> <span class=s2>" "</span><span class=p>)</span><span class=o>.</span><span class=n>strip</span><span class=p>()</span>
+    <span class=k>if</span> <span class=nb>str</span><span class=o>.</span><span class=fm>__len__</span><span class=p>(</span><span class=n>path</span><span class=p>)</span> <span class=o><=</span> <span class=mi>0</span><span class=p>:</span>
+        <span class=k>if</span> <span class=n>request</span> <span class=ow>is</span> <span class=n>REQUEST_FILE</span><span class=p>:</span>
+            <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"path cannot be empty for </span><span class=si>{</span><span class=n>request</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+        <span class=n>path</span> <span class=o>=</span> <span class=kc>None</span>
+    <span class=k>if</span> <span class=p>(</span><span class=n>path</span> <span class=ow>is</span> <span class=kc>None</span><span class=p>)</span> <span class=o>!=</span> <span class=p>(</span><span class=n>repository</span> <span class=ow>is</span> <span class=kc>None</span><span class=p>):</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span>
+            <span class=sa>f</span><span class=s2>"path=</span><span class=si>{</span><span class=n>path</span><span class=si>!r}</span><span class=s2> not permitted if repository=</span><span class=si>{</span><span class=n>repository</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+
+    <span class=c1># process post information while protecting protected spaces</span>
+    <span class=n>post</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>str</span><span class=p>]</span> <span class=o>=</span> <span class=n>line</span><span class=p>[</span><span class=n>idx_4</span> <span class=o>+</span> <span class=mi>1</span><span class=p>:</span><span class=n>idx_5</span><span class=p>]</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=n>markers</span><span class=p>[</span><span class=mi>0</span><span class=p>],</span> <span class=s2>"</span><span class=se>\\</span><span class=s2>"</span><span class=p>)</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span>
+        <span class=n>markers</span><span class=p>[</span><span class=mi>1</span><span class=p>],</span> <span class=s2>"{"</span><span class=p>)</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=n>markers</span><span class=p>[</span><span class=mi>2</span><span class=p>],</span> <span class=s2>"}"</span><span class=p>)</span><span class=o>.</span><span class=n>strip</span><span class=p>()</span>
+
+    <span class=n>command</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>tuple</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=o>...</span><span class=p>]</span> <span class=o>|</span> <span class=kc>None</span><span class=p>]</span> <span class=o>=</span> <span class=kc>None</span> <span class=k>if</span> <span class=p>(</span>
+        <span class=nb>str</span><span class=o>.</span><span class=fm>__len__</span><span class=p>(</span><span class=n>post</span><span class=p>)</span> <span class=o><=</span> <span class=mi>0</span><span class=p>)</span> <span class=k>else</span> <span class=nb>tuple</span><span class=p>(</span><span class=n>t</span> <span class=k>for</span> <span class=n>t</span> <span class=ow>in</span> <span class=p>(</span>
+            <span class=n>s</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=n>markers</span><span class=p>[</span><span class=mi>3</span><span class=p>],</span> <span class=s2>" "</span><span class=p>)</span><span class=o>.</span><span class=n>strip</span><span class=p>()</span>
+            <span class=k>for</span> <span class=n>s</span> <span class=ow>in</span> <span class=n>post</span><span class=o>.</span><span class=n>split</span><span class=p>())</span> <span class=k>if</span> <span class=nb>len</span><span class=p>(</span><span class=n>t</span><span class=p>)</span> <span class=o>></span> <span class=mi>0</span><span class=p>)</span>
+    <span class=k>if</span> <span class=p>(</span><span class=n>command</span> <span class=ow>is</span> <span class=kc>None</span><span class=p>)</span> <span class=ow>and</span> <span class=p>(</span><span class=n>request</span> <span class=ow>is</span> <span class=n>REQUEST_PROCESS</span><span class=p>):</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"command cannot be empty for </span><span class=si>{</span><span class=n>request</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+    <span class=k>return</span> <span class=n>request</span><span class=p>,</span> <span class=n>repository</span><span class=p>,</span> <span class=n>path</span><span class=p>,</span> <span class=n>command</span>
+
+
+<span class=c1>#: the response header for the path</span>
+<span class=n>RESPONSE_PATH</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>str</span><span class=p>]</span> <span class=o>=</span> <span class=sa>r</span><span class=s2>"\@latexgit@path"</span>
+<span class=c1>#: the response header for the url</span>
+<span class=n>RESPONSE_URL</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>str</span><span class=p>]</span> <span class=o>=</span> <span class=sa>r</span><span class=s2>"\@latexgit@url"</span>
+
+
+<span class=k>def</span> <span class=nf>__make_response</span><span class=p>(</span>
+        <span class=n>base_dir</span><span class=p>:</span> <span class=n>Path</span><span class=p>,</span> <span class=n>file_and_url</span><span class=p>:</span> <span class=nb>tuple</span><span class=p>[</span><span class=n>Path</span><span class=p>,</span> <span class=nb>str</span> <span class=o>|</span> <span class=kc>None</span><span class=p>],</span> <span class=n>index</span><span class=p>:</span> <span class=nb>int</span><span class=p>)</span> \
+        <span class=o>-></span> <span class=nb>tuple</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=nb>str</span><span class=p>]:</span>
+<span class=w>    </span><span class=sa>r</span><span class=sd>"""</span>
+<span class=sd>    Make a path entry command.</span>
+
+<span class=sd>    :param base_dir: the base directory</span>
+<span class=sd>    :param file_and_url: the file path and the url</span>
+<span class=sd>    :param index: the file index</span>
+<span class=sd>    :return: the `latexgit` compliant path command</span>
+
+<span class=sd>    >>> from os.path import dirname</span>
+<span class=sd>    >>> import latexgit.aux as aa</span>
+<span class=sd>    >>> from pycommons.io.path import file_path</span>
+<span class=sd>    >>> fle = file_path(aa.__file__)</span>
+<span class=sd>    >>> bd = directory_path(dirname(dirname(fle)))</span>
+<span class=sd>    >>> x = __make_response(bd, (fle, 'https://example.com'), 3)</span>
+<span class=sd>    >>> x[0]</span>
+<span class=sd>    '\\xdef\\@latexgit@pathd{latexgit/aux.py}%'</span>
+<span class=sd>    >>> x[1]</span>
+<span class=sd>    '\\xdef\\@latexgit@urld{https://example.com}%'</span>
+<span class=sd>    >>> x = __make_response(bd, (fle, 'https://example.com#3_4'), 0)</span>
+<span class=sd>    >>> x[0]</span>
+<span class=sd>    '\\xdef\\@latexgit@patha{latexgit/aux.py}%'</span>
+<span class=sd>    >>> x[1]</span>
+<span class=sd>    '\\xdef\\@latexgit@urla{https://example.com\\#3_4}%'</span>
+<span class=sd>    """</span>
+    <span class=n>base_dir</span><span class=o>.</span><span class=n>enforce_dir</span><span class=p>()</span>
+    <span class=n>suffix</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>str</span><span class=p>]</span> <span class=o>=</span> <span class=n>__int_to_alpha</span><span class=p>(</span><span class=n>index</span><span class=p>)</span>
+    <span class=n>file</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>Path</span><span class=p>]</span> <span class=o>=</span> <span class=n>file_and_url</span><span class=p>[</span><span class=mi>0</span><span class=p>]</span>
+    <span class=n>url</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>str</span><span class=p>]</span> <span class=o>=</span> <span class=s2>""</span> <span class=k>if</span> <span class=n>file_and_url</span><span class=p>[</span><span class=mi>1</span><span class=p>]</span> <span class=ow>is</span> <span class=kc>None</span> \
+        <span class=k>else</span> <span class=n>file_and_url</span><span class=p>[</span><span class=mi>1</span><span class=p>]</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=s2>"#"</span><span class=p>,</span> <span class=sa>r</span><span class=s2>"\#"</span><span class=p>)</span>
+    <span class=n>file</span><span class=o>.</span><span class=n>enforce_file</span><span class=p>()</span>
+    <span class=k>return</span> <span class=p>((</span><span class=sa>f</span><span class=s2>"</span><span class=se>\\</span><span class=s2>xdef</span><span class=si>{</span><span class=n>RESPONSE_PATH</span><span class=si>}{</span><span class=n>suffix</span><span class=si>}</span><span class=se>{{</span><span class=s2>"</span>
+            <span class=sa>f</span><span class=s2>"</span><span class=si>{</span><span class=n>file</span><span class=o>.</span><span class=n>relative_to</span><span class=p>(</span><span class=n>base_dir</span><span class=p>)</span><span class=si>}</span><span class=se>}}</span><span class=s2>%"</span><span class=p>),</span>
+            <span class=sa>f</span><span class=s2>"</span><span class=se>\\</span><span class=s2>xdef</span><span class=si>{</span><span class=n>RESPONSE_URL</span><span class=si>}{</span><span class=n>suffix</span><span class=si>}</span><span class=se>{{</span><span class=si>{</span><span class=n>url</span><span class=si>}</span><span class=se>}}</span><span class=s2>%"</span><span class=p>)</span>
+
+
+<div class=viewcode-block id=run>
+<a class=viewcode-back href=../../latexgit.html#latexgit.aux.run>[docs]</a>
+<span class=k>def</span> <span class=nf>run</span><span class=p>(</span><span class=n>aux_arg</span><span class=p>:</span> <span class=nb>str</span><span class=p>,</span> <span class=n>repo_dir_arg</span><span class=p>:</span> <span class=nb>str</span> <span class=o>=</span> <span class=s2>"__git__"</span><span class=p>)</span> <span class=o>-></span> <span class=kc>None</span><span class=p>:</span>
+<span class=w>    </span><span class=sd>"""</span>
+<span class=sd>    Execute the `latexgit` tool.</span>
+
+<span class=sd>    This tool loads an LaTeX `aux` file, processes all file loading requests,</span>
+<span class=sd>    and flushes the produced file paths back to the `aux` file.</span>
+
+<span class=sd>    :param aux_arg: the `aux` file argument</span>
+<span class=sd>    :param repo_dir_arg: the repository directory argument</span>
+<span class=sd>    """</span>
+    <span class=n>aux_file</span><span class=p>:</span> <span class=n>Path</span> <span class=o>=</span> <span class=n>Path</span><span class=p>(</span><span class=n>aux_arg</span><span class=p>)</span>
+    <span class=k>if</span> <span class=ow>not</span> <span class=n>aux_file</span><span class=o>.</span><span class=n>is_file</span><span class=p>():</span>
+        <span class=n>aux_file</span> <span class=o>=</span> <span class=n>Path</span><span class=p>(</span><span class=sa>f</span><span class=s2>"</span><span class=si>{</span><span class=n>aux_arg</span><span class=si>}</span><span class=s2>.aux"</span><span class=p>)</span>
+    <span class=k>if</span> <span class=ow>not</span> <span class=n>aux_file</span><span class=o>.</span><span class=n>is_file</span><span class=p>():</span>
+        <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"aux argument </span><span class=si>{</span><span class=n>aux_arg</span><span class=si>!r}</span><span class=s2> does not identify a file "</span>
+                         <span class=sa>f</span><span class=s2>"and neither does </span><span class=si>{</span><span class=n>aux_file</span><span class=si>!r}</span><span class=s2>"</span><span class=p>)</span>
+    <span class=n>logger</span><span class=p>(</span><span class=sa>f</span><span class=s2>"Using aux file </span><span class=si>{</span><span class=n>aux_file</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+
+    <span class=k>if</span> <span class=n>getsize</span><span class=p>(</span><span class=n>aux_file</span><span class=p>)</span> <span class=o><=</span> <span class=mi>0</span><span class=p>:</span>
+        <span class=n>logger</span><span class=p>(</span><span class=sa>f</span><span class=s2>"aux file </span><span class=si>{</span><span class=n>aux_file</span><span class=si>!r}</span><span class=s2> is empty. Nothing to do. Exiting."</span><span class=p>)</span>
+        <span class=k>return</span>
+    <span class=n>lines</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>list</span><span class=p>[</span><span class=nb>str</span><span class=p>]]</span> <span class=o>=</span> <span class=nb>list</span><span class=p>(</span><span class=n>aux_file</span><span class=o>.</span><span class=n>open_for_read</span><span class=p>())</span>
+    <span class=n>lenlines</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=nb>int</span><span class=p>]</span> <span class=o>=</span> <span class=nb>len</span><span class=p>(</span><span class=n>lines</span><span class=p>)</span>
+    <span class=k>if</span> <span class=n>lenlines</span> <span class=o><=</span> <span class=mi>0</span><span class=p>:</span>
+        <span class=n>logger</span><span class=p>(</span><span class=sa>f</span><span class=s2>"aux file </span><span class=si>{</span><span class=n>aux_file</span><span class=si>!r}</span><span class=s2> contains no lines. "</span>
+               <span class=s2>"Nothing to do. Exiting."</span><span class=p>)</span>
+    <span class=k>else</span><span class=p>:</span>
+        <span class=n>logger</span><span class=p>(</span><span class=sa>f</span><span class=s2>"Loaded </span><span class=si>{</span><span class=n>lenlines</span><span class=si>}</span><span class=s2> lines from aux file </span><span class=si>{</span><span class=n>aux_file</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+
+    <span class=n>base_dir</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>Path</span><span class=p>]</span> <span class=o>=</span> <span class=n>directory_path</span><span class=p>(</span><span class=n>dirname</span><span class=p>(</span><span class=n>aux_file</span><span class=p>))</span>
+    <span class=n>logger</span><span class=p>(</span><span class=sa>f</span><span class=s2>"The base directory is </span><span class=si>{</span><span class=n>base_dir</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+
+    <span class=n>proc</span><span class=p>:</span> <span class=n>Processed</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=kc>None</span>
+    <span class=n>append</span><span class=p>:</span> <span class=nb>list</span><span class=p>[</span><span class=nb>str</span><span class=p>]</span> <span class=o>=</span> <span class=p>[]</span>
+
+    <span class=k>try</span><span class=p>:</span>
+        <span class=n>resolved</span><span class=p>:</span> <span class=nb>int</span> <span class=o>=</span> <span class=mi>0</span>
+        <span class=k>for</span> <span class=n>line</span> <span class=ow>in</span> <span class=n>lines</span><span class=p>:</span>
+            <span class=n>request</span><span class=p>:</span> <span class=nb>tuple</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=nb>str</span> <span class=o>|</span> <span class=kc>None</span><span class=p>,</span> <span class=nb>str</span> <span class=o>|</span> <span class=kc>None</span><span class=p>,</span> <span class=nb>tuple</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span>
+                           <span class=o>...</span><span class=p>]</span> <span class=o>|</span> <span class=kc>None</span><span class=p>]</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=n>__get_request</span><span class=p>(</span><span class=n>line</span><span class=p>)</span>
+            <span class=k>if</span> <span class=n>request</span> <span class=ow>is</span> <span class=kc>None</span><span class=p>:</span>
+                <span class=k>continue</span>
+
+            <span class=n>func</span><span class=p>:</span> <span class=nb>str</span> <span class=o>=</span> <span class=n>request</span><span class=p>[</span><span class=mi>0</span><span class=p>]</span>
+            <span class=n>repo</span><span class=p>:</span> <span class=nb>str</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=n>request</span><span class=p>[</span><span class=mi>1</span><span class=p>]</span>
+            <span class=n>path</span><span class=p>:</span> <span class=nb>str</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=n>request</span><span class=p>[</span><span class=mi>2</span><span class=p>]</span>
+            <span class=n>command</span><span class=p>:</span> <span class=nb>tuple</span><span class=p>[</span><span class=nb>str</span><span class=p>,</span> <span class=o>...</span><span class=p>]</span> <span class=o>|</span> <span class=kc>None</span> <span class=o>=</span> <span class=n>request</span><span class=p>[</span><span class=mi>3</span><span class=p>]</span>
+
+            <span class=k>if</span> <span class=n>proc</span> <span class=ow>is</span> <span class=kc>None</span><span class=p>:</span>
+                <span class=n>git_dir</span><span class=p>:</span> <span class=n>Path</span> <span class=o>=</span> <span class=n>base_dir</span><span class=o>.</span><span class=n>resolve_inside</span><span class=p>(</span><span class=n>repo_dir_arg</span><span class=p>)</span>
+                <span class=n>logger</span><span class=p>(</span><span class=sa>f</span><span class=s2>"The repository directory is </span><span class=si>{</span><span class=n>git_dir</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+                <span class=n>proc</span> <span class=o>=</span> <span class=n>Processed</span><span class=p>(</span><span class=n>git_dir</span><span class=p>)</span>
+
+            <span class=n>file_and_url</span><span class=p>:</span> <span class=nb>tuple</span><span class=p>[</span><span class=n>Path</span><span class=p>,</span> <span class=n>URL</span> <span class=o>|</span> <span class=kc>None</span><span class=p>]</span> <span class=o>|</span> <span class=kc>None</span>
+            <span class=k>if</span> <span class=n>func</span> <span class=ow>is</span> <span class=n>REQUEST_FILE</span><span class=p>:</span>
+                <span class=n>file_and_url</span> <span class=o>=</span> <span class=n>proc</span><span class=o>.</span><span class=n>get_file_and_url</span><span class=p>(</span>
+                    <span class=n>repo_url</span><span class=o>=</span><span class=n>repo</span><span class=p>,</span> <span class=n>relative_path</span><span class=o>=</span><span class=n>path</span><span class=p>,</span> <span class=n>processor</span><span class=o>=</span><span class=n>command</span><span class=p>)</span>
+            <span class=k>elif</span> <span class=n>func</span> <span class=ow>is</span> <span class=n>REQUEST_PROCESS</span><span class=p>:</span>
+                <span class=n>file_and_url</span> <span class=o>=</span> <span class=n>proc</span><span class=o>.</span><span class=n>get_output</span><span class=p>(</span>
+                    <span class=n>command</span><span class=o>=</span><span class=n>command</span><span class=p>,</span> <span class=n>repo_url</span><span class=o>=</span><span class=n>repo</span><span class=p>,</span> <span class=n>relative_dir</span><span class=o>=</span><span class=n>path</span><span class=p>)</span>
+            <span class=k>else</span><span class=p>:</span>
+                <span class=k>raise</span> <span class=ne>ValueError</span><span class=p>(</span><span class=sa>f</span><span class=s2>"Invalid request: </span><span class=si>{</span><span class=n>func</span><span class=si>!r}</span><span class=s2>, </span><span class=si>{</span><span class=n>repo</span><span class=si>!r}</span><span class=s2>, "</span>
+                                 <span class=sa>f</span><span class=s2>"</span><span class=si>{</span><span class=n>path</span><span class=si>!r}</span><span class=s2>, </span><span class=si>{</span><span class=n>command</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span>
+            <span class=n>append</span><span class=o>.</span><span class=n>extend</span><span class=p>(</span><span class=n>__make_response</span><span class=p>(</span><span class=n>base_dir</span><span class=p>,</span> <span class=n>file_and_url</span><span class=p>,</span> <span class=n>resolved</span><span class=p>))</span>
+            <span class=n>resolved</span> <span class=o>+=</span> <span class=mi>1</span>
+    <span class=k>finally</span><span class=p>:</span>
+        <span class=k>if</span> <span class=n>proc</span> <span class=ow>is</span> <span class=ow>not</span> <span class=kc>None</span><span class=p>:</span>
+            <span class=n>proc</span><span class=o>.</span><span class=n>close</span><span class=p>()</span>
+            <span class=k>del</span> <span class=n>proc</span>
+
+    <span class=k>if</span> <span class=nb>len</span><span class=p>(</span><span class=n>append</span><span class=p>)</span> <span class=o><=</span> <span class=mi>0</span><span class=p>:</span>
+        <span class=n>logger</span><span class=p>(</span><span class=s2>"No file requests found. Nothing to do."</span><span class=p>)</span>
+
+    <span class=n>logger</span><span class=p>(</span><span class=sa>f</span><span class=s2>"Found and resolved </span><span class=si>{</span><span class=n>resolved</span><span class=si>}</span><span class=s2> file requests."</span><span class=p>)</span>
+    <span class=n>lines</span><span class=o>.</span><span class=n>extend</span><span class=p>(</span><span class=n>append</span><span class=p>)</span>
+    <span class=k>with</span> <span class=n>aux_file</span><span class=o>.</span><span class=n>open_for_write</span><span class=p>()</span> <span class=k>as</span> <span class=n>wd</span><span class=p>:</span>
+        <span class=n>write_lines</span><span class=p>(</span><span class=nb>map</span><span class=p>(</span><span class=nb>str</span><span class=o>.</span><span class=n>rstrip</span><span class=p>,</span> <span class=n>lines</span><span class=p>),</span> <span class=n>wd</span><span class=p>)</span>
+    <span class=n>logger</span><span class=p>(</span><span class=sa>f</span><span class=s2>"Finished flushing </span><span class=si>{</span><span class=nb>len</span><span class=p>(</span><span class=n>lines</span><span class=p>)</span><span class=si>}</span><span class=s2> lines to aux file </span><span class=si>{</span><span class=n>aux_file</span><span class=si>!r}</span><span class=s2>."</span><span class=p>)</span></div>
+
+
+
+<span class=c1># Execute the latexgit tool</span>
+<span class=k>if</span> <span class=vm>__name__</span> <span class=o>==</span> <span class=s2>"__main__"</span><span class=p>:</span>
+    <span class=n>parser</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>argparse</span><span class=o>.</span><span class=n>ArgumentParser</span><span class=p>]</span> <span class=o>=</span> <span class=n>make_argparser</span><span class=p>(</span>
+        <span class=vm>__file__</span><span class=p>,</span> <span class=s2>"Execute the latexgit Tool."</span><span class=p>,</span>
+        <span class=n>make_epilog</span><span class=p>(</span>
+            <span class=s2>"Download and provide local paths for "</span>
+            <span class=s2>"files from git repositories."</span><span class=p>,</span>
+            <span class=mi>2023</span><span class=p>,</span> <span class=kc>None</span><span class=p>,</span> <span class=s2>"Thomas Weise"</span><span class=p>,</span>
+            <span class=n>url</span><span class=o>=</span><span class=s2>"https://thomasweise.github.io/latexgit_py"</span><span class=p>,</span>
+            <span class=n>email</span><span class=o>=</span><span class=s2>"tweise@hfuu.edu.cn, tweise@ustc.edu.cn"</span><span class=p>),</span>
+        <span class=n>__version__</span><span class=p>)</span>
+    <span class=n>parser</span><span class=o>.</span><span class=n>add_argument</span><span class=p>(</span>
+        <span class=s2>"aux"</span><span class=p>,</span> <span class=n>help</span><span class=o>=</span><span class=s2>"the aux file to process"</span><span class=p>,</span> <span class=nb>type</span><span class=o>=</span><span class=nb>str</span><span class=p>,</span> <span class=n>default</span><span class=o>=</span><span class=s2>""</span><span class=p>)</span>
+    <span class=n>parser</span><span class=o>.</span><span class=n>add_argument</span><span class=p>(</span>
+        <span class=s2>"--repoDir"</span><span class=p>,</span> <span class=n>help</span><span class=o>=</span><span class=s2>"the directory to use for downloads"</span><span class=p>,</span>
+        <span class=nb>type</span><span class=o>=</span><span class=nb>str</span><span class=p>,</span> <span class=n>default</span><span class=o>=</span><span class=s2>"__git__"</span><span class=p>,</span> <span class=n>nargs</span><span class=o>=</span><span class=s2>"?"</span><span class=p>)</span>
+    <span class=n>args</span><span class=p>:</span> <span class=n>Final</span><span class=p>[</span><span class=n>argparse</span><span class=o>.</span><span class=n>Namespace</span><span class=p>]</span> <span class=o>=</span> <span class=n>parser</span><span class=o>.</span><span class=n>parse_args</span><span class=p>()</span>
+
+    <span class=n>run</span><span class=p>(</span><span class=n>args</span><span class=o>.</span><span class=n>aux</span><span class=o>.</span><span class=n>strip</span><span class=p>(),</span> <span class=n>args</span><span class=o>.</span><span class=n>repoDir</span><span class=o>.</span><span class=n>strip</span><span class=p>())</span>
+    <span class=n>logger</span><span class=p>(</span><span class=s2>"All done."</span><span class=p>)</span>
+</pre></div><div class=clearer></div></div></div></div><div aria-label=Main class=sphinxsidebar role=navigation><div class=sphinxsidebarwrapper><search id=searchbox role=search style=display:none> <h3 id=searchlabel>Quick search</h3> <div class=searchformwrapper><form action=../../search.html class=search><input aria-labelledby=searchlabel autocapitalize=off autocomplete=off autocorrect=off name=q spellcheck=false><input type=submit value=Go></form></div> </search><script>document.getElementById(`searchbox`).style.display=`block`</script></div></div><div class=clearer></div></div><div aria-label=Related class=related role=navigation><h3>Navigation</h3><ul><li class=right style=margin-right:10px><a title="General Index"href=../../genindex.html>index</a><li class=right><a title="Python Module Index"href=../../py-modindex.html>modules</a> |<li class="nav-item nav-item-0"><a href=../../index.html>latexgit 0.8.22 documentation</a> »<li class="nav-item nav-item-1"><a href=../index.html>Module code</a> »<li class="nav-item nav-item-this"><a href>latexgit.aux</a></ul></div><div class=footer role=contentinfo>© Copyright 2023-2024, Thomas Weise.</div>
