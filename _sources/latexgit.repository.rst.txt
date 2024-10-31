@@ -1,0 +1,42 @@
+latexgit.repository package
+===========================
+
+.. automodule:: latexgit.repository
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Submodules
+----------
+
+latexgit.repository.fix\_path module
+------------------------------------
+
+.. automodule:: latexgit.repository.fix_path
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+latexgit.repository.git module
+------------------------------
+
+.. automodule:: latexgit.repository.git
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+latexgit.repository.gitmanager module
+-------------------------------------
+
+.. automodule:: latexgit.repository.gitmanager
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+latexgit.repository.processed module
+------------------------------------
+
+.. automodule:: latexgit.repository.processed
+   :members:
+   :undoc-members:
+   :show-inheritance:
