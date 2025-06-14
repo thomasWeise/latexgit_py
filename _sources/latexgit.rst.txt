@@ -1,0 +1,35 @@
+latexgit package
+================
+
+.. automodule:: latexgit
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   latexgit.formatters
+   latexgit.repository
+
+Submodules
+----------
+
+latexgit.aux module
+-------------------
+
+.. automodule:: latexgit.aux
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+latexgit.version module
+-----------------------
+
+.. automodule:: latexgit.version
+   :members:
+   :show-inheritance:
+   :undoc-members:
